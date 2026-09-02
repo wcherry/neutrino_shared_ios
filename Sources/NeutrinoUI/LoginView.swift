@@ -74,10 +74,8 @@ public struct LoginView: View {
 
                 Spacer().frame(height: 48)
 
-                VStack(spacing: 16) {
-                    ForEach(brand.trustRows) { TrustRowView($0) }
-                }
-                .padding(.horizontal, 40)
+                TrustRowCarousel(rows: brand.trustRows)
+                    .padding(.horizontal, 40)
 
                 Spacer().frame(height: 40)
 
