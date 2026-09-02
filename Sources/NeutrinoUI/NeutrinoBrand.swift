@@ -150,6 +150,18 @@ public extension NeutrinoBrand {
         ]
     )
 
+    static let slides = NeutrinoBrand(
+        title: "Neutrino Slides",
+        logoSymbol: "rectangle.on.rectangle.angled",
+        tagline: "Encrypted presentations you can show anywhere",
+        gradient: [Color(.systemOrange), Color(.systemYellow)],
+        trustRows: [
+            TrustRow(icon: "lock.shield.fill",            title: "End-to-end encrypted",       color: Color(.systemGreen)),
+            TrustRow(icon: "arrow.triangle.2.circlepath", title: "Synced with Neutrino Drive", color: Color(.systemBlue)),
+            TrustRow(icon: "key.fill",                    title: "Only you hold your keys",    color: Color(.systemIndigo)),
+        ]
+    )
+
     static let notes = NeutrinoBrand(
         title: "Neutrino Notes",
         logoSymbol: "note.text",

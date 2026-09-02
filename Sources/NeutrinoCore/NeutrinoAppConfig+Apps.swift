@@ -1,13 +1,13 @@
 import Foundation
 import Security
 
-// MARK: - The five apps
+// MARK: - The six apps
 
 /// The shipped configuration for each Neutrino iOS app.
 ///
 /// These live in the package rather than in each app so adoption is one line — `NeutrinoApp
-/// .configure(.drive)` — and, more importantly, so the namespacing contract is checkable. Five
-/// apps writing five prefixes cannot be verified when the prefixes live in five repositories; here
+/// .configure(.drive)` — and, more importantly, so the namespacing contract is checkable. Six
+/// apps writing six prefixes cannot be verified when the prefixes live in six repositories; here
 /// a test asserts that no two of them collide.
 ///
 /// **Every value below is load-bearing on an installed device.** The prefixes are what the shipped
@@ -77,7 +77,17 @@ public extension NeutrinoAppConfig {
         loadsProfileOnLogin: true
     )
 
+    static let slides = NeutrinoAppConfig(
+        slug: "slides",
+        displayName: "Neutrino Slides",
+        keychainPrefix: "nslide",
+        oauthClientID: "neutrino-slides-ios",
+        defaultHost: "https://www.getneutrino.app",
+        supportsRegistration: true,
+        supportsTwoFactor: false
+    )
+
     /// Every shipped app. Exists so the collision test cannot silently miss one that was added
     /// without being registered.
-    static let allApps: [NeutrinoAppConfig] = [.drive, .docs, .sheets, .notes, .photos]
+    static let allApps: [NeutrinoAppConfig] = [.drive, .docs, .sheets, .notes, .photos, .slides]
 }
