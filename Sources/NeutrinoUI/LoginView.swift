@@ -116,14 +116,14 @@ public struct LoginView: View {
                 .onSubmit { focusedField = .password }
                 .brandFieldStyle()
 
-            SecureField("Password", text: $password)
-                .textContentType(.password)
-                .focused($focusedField, equals: .password)
-                .submitLabel(authService.requiresTwoFactorCode ? .next : .go)
-                .onSubmit {
-                    if authService.requiresTwoFactorCode { focusedField = .totp } else { submit() }
-                }
-                .brandFieldStyle()
+            BrandPasswordField("Password",
+                               text: $password,
+                               focus: $focusedField,
+                               field: .password,
+                               contentType: .password,
+                               submitLabel: authService.requiresTwoFactorCode ? .next : .go) {
+                if authService.requiresTwoFactorCode { focusedField = .totp } else { submit() }
+            }
 
             // Shown only once the server has said this account has two-factor enabled — asking
             // every account for a code it does not have would be worse than not asking at all.

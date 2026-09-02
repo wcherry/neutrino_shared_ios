@@ -205,6 +205,86 @@ public extension View {
     func brandFieldStyle() -> some View { modifier(BrandFieldStyle()) }
 }
 
+// MARK: - BrandPasswordField
+
+/// A password field with a reveal toggle, in the rounded filled style the hero screens use.
+///
+/// Sign-up had this and sign-in did not, which is backwards: a mistyped password on the sign-in
+/// screen is the one that produces a rejection with nothing to look at. One component now, so the
+/// two screens cannot drift again.
+///
+/// Generic over the focus value so each screen keeps its own `Field` enum — the alternative is a
+/// shared enum that has to name every field on every screen.
+public struct BrandPasswordField<Field: Hashable>: View {
+
+    private let placeholder: String
+    @Binding private var text: String
+    private let focus: FocusState<Field?>.Binding
+    private let field: Field
+    private let contentType: UITextContentType
+    private let submitLabel: SubmitLabel
+    private let onSubmit: () -> Void
+
+    /// Revealed state is owned here and starts hidden every time the field is built. A password
+    /// left visible across a re-presented sheet is not something the user asked for.
+    @State private var isRevealed = false
+
+    public init(_ placeholder: String,
+                text: Binding<String>,
+                focus: FocusState<Field?>.Binding,
+                field: Field,
+                contentType: UITextContentType = .password,
+                submitLabel: SubmitLabel = .go,
+                onSubmit: @escaping () -> Void = {}) {
+        self.placeholder = placeholder
+        self._text = text
+        self.focus = focus
+        self.field = field
+        self.contentType = contentType
+        self.submitLabel = submitLabel
+        self.onSubmit = onSubmit
+    }
+
+    public var body: some View {
+        HStack {
+            Group {
+                if isRevealed {
+                    TextField(placeholder, text: $text)
+                } else {
+                    SecureField(placeholder, text: $text)
+                }
+            }
+            .textContentType(contentType)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .focused(focus, equals: field)
+            .submitLabel(submitLabel)
+            .onSubmit(onSubmit)
+
+            Button {
+                let wasFocused = focus.wrappedValue == field
+                isRevealed.toggle()
+                // Swapping SecureField for TextField replaces the view, and the replacement is not
+                // the one that held focus — so the keyboard drops and the caret disappears mid-typing
+                // unless focus is handed back. Only re-asserted when this field actually had it, or
+                // tapping the eye would steal focus from wherever the user was.
+                if wasFocused {
+                    DispatchQueue.main.async { focus.wrappedValue = field }
+                }
+            } label: {
+                Image(systemName: isRevealed ? "eye.slash" : "eye")
+                    .foregroundStyle(.secondary)
+                    // The glyphs differ in width, so the field's text would shift as it toggles.
+                    .frame(width: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
+        }
+        .brandFieldStyle()
+    }
+}
+
 // MARK: - BrandButton
 
 /// The gradient primary button, with its own progress state.

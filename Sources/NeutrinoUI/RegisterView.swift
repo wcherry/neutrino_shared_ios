@@ -23,8 +23,6 @@ public struct RegisterView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
-    @State private var revealPassword = false
-    @State private var revealConfirmPassword = false
 
     @FocusState private var focusedField: Field?
 
@@ -117,57 +115,25 @@ public struct RegisterView: View {
                 .onSubmit { focusedField = .password }
                 .brandFieldStyle()
 
-            passwordRow(placeholder: "At least \(Self.minimumPasswordLength) characters",
-                        text: $password,
-                        reveal: $revealPassword,
-                        field: .password,
-                        submitLabel: .next) {
+            BrandPasswordField("At least \(Self.minimumPasswordLength) characters",
+                               text: $password,
+                               focus: $focusedField,
+                               field: .password,
+                               contentType: .newPassword,
+                               submitLabel: .next) {
                 focusedField = .confirmPassword
             }
 
-            passwordRow(placeholder: "Re-enter your password",
-                        text: $confirmPassword,
-                        reveal: $revealConfirmPassword,
-                        field: .confirmPassword,
-                        submitLabel: .go) {
+            BrandPasswordField("Re-enter your password",
+                               text: $confirmPassword,
+                               focus: $focusedField,
+                               field: .confirmPassword,
+                               contentType: .newPassword,
+                               submitLabel: .go) {
                 submit()
             }
         }
         .padding(.horizontal, 32)
-    }
-
-    @ViewBuilder
-    private func passwordRow(placeholder: String,
-                             text: Binding<String>,
-                             reveal: Binding<Bool>,
-                             field: Field,
-                             submitLabel: SubmitLabel,
-                             onSubmit: @escaping () -> Void) -> some View {
-        HStack {
-            Group {
-                if reveal.wrappedValue {
-                    TextField(placeholder, text: text)
-                } else {
-                    SecureField(placeholder, text: text)
-                }
-            }
-            .textContentType(.newPassword)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .focused($focusedField, equals: field)
-            .submitLabel(submitLabel)
-            .onSubmit(onSubmit)
-
-            Button {
-                reveal.wrappedValue.toggle()
-            } label: {
-                Image(systemName: reveal.wrappedValue ? "eye.slash" : "eye")
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(reveal.wrappedValue ? "Hide password" : "Show password")
-        }
-        .brandFieldStyle()
     }
 
     // MARK: - Validation
