@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 // MARK: - NeutrinoAppConfig
 
@@ -54,6 +55,26 @@ public struct NeutrinoAppConfig: Sendable {
     /// the extension cannot read it.
     public let keychainAccessGroup: String?
 
+    // MARK: - Keychain protection
+
+    /// `kSecAttrAccessible` for every item this package writes.
+    ///
+    /// Always a `…ThisDeviceOnly` variant — that half is not negotiable, and is what keeps the
+    /// refresh token and the identity secret key out of iCloud Keychain and encrypted backups.
+    /// What differs is *when* an item is readable:
+    ///
+    /// - `AfterFirstUnlock…` (the default) lets a background task read a token on a locked device.
+    ///   Drive uploads from a `BGProcessingTask` and Photos syncs the camera roll, and under
+    ///   `WhenUnlocked` every such wake-up would fail to read the key and look like a sync that
+    ///   silently stopped.
+    /// - `WhenUnlocked…` is stricter — the items are unreadable while the device is locked, so a
+    ///   phone seized powered-on is a better position. Notes shipped with this and has no
+    ///   background transfer path, so it keeps it.
+    ///
+    /// Per-app rather than a single constant because adopting this package must not quietly
+    /// downgrade an app's protection, and `AfterFirstUnlock` is the weaker of the two.
+    public let keychainAccessibility: CFString
+
     // MARK: - Capabilities
 
     /// Whether the sign-in screen offers account creation. Only Docs shipped a `RegisterView`;
@@ -76,6 +97,7 @@ public struct NeutrinoAppConfig: Sendable {
                 oauthRedirectURI: String = "neutrino://oauth/callback",
                 appGroupIdentifier: String? = nil,
                 keychainAccessGroup: String? = nil,
+                keychainAccessibility: CFString = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
                 supportsRegistration: Bool = true,
                 supportsTwoFactor: Bool = true) {
         self.slug = slug
@@ -86,6 +108,7 @@ public struct NeutrinoAppConfig: Sendable {
         self.oauthRedirectURI = oauthRedirectURI
         self.appGroupIdentifier = appGroupIdentifier
         self.keychainAccessGroup = keychainAccessGroup
+        self.keychainAccessibility = keychainAccessibility
         self.supportsRegistration = supportsRegistration
         self.supportsTwoFactor = supportsTwoFactor
     }

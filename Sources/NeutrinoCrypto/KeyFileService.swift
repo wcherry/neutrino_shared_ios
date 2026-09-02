@@ -140,12 +140,12 @@ public final class KeyFileService {
 
     private let logger: Logger
 
-    private static let sodium = Sodium()
+    private nonisolated static let sodium = Sodium()
     private static let decoder = JSONDecoder()
 
     /// A Curve25519 secret key is 32 bytes. Anything else came back damaged, and storing it would
     /// produce a key that silently opens nothing.
-    private static let curve25519SecretKeyBytes = 32
+    private nonisolated static let curve25519SecretKeyBytes = 32
 
     /// Set once at app launch, as the other services are, so a caller that does not hold an
     /// `AuthService` can still refresh an expiring token.

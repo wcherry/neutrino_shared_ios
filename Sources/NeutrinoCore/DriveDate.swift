@@ -49,6 +49,18 @@ public enum DriveDate {
         return (zone.isEmpty ? naiveFormatter : zonedFormatter).date(from: normalized)
     }
 
+    // MARK: - Encoding
+
+    /// The shape `POST /api/v1/photos` parses a capture date out of.
+    ///
+    /// The server reads it with `chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S")`,
+    /// which accepts *exactly* that: no fractional seconds, no zone suffix. An ISO 8601 string with
+    /// either would silently fail to parse and the photo would be filed under its upload time
+    /// instead of the moment it was taken — so this formatter, not `ISO8601DateFormatter`.
+    public static func naiveUTCString(from date: Date) -> String {
+        naiveWriteFormatter.string(from: date)
+    }
+
     // MARK: - Decoding
 
     /// A `JSONDecoder` that reads every Drive timestamp shape. Not shared as a single instance
@@ -77,6 +89,7 @@ public enum DriveDate {
 
     private static let zonedFormatter = makeFormatter("yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX")
     private static let naiveFormatter = makeFormatter("yyyy-MM-dd'T'HH:mm:ss.SSS")
+    private static let naiveWriteFormatter = makeFormatter("yyyy-MM-dd'T'HH:mm:ss")
 
     private static func makeFormatter(_ format: String) -> DateFormatter {
         let f = DateFormatter()

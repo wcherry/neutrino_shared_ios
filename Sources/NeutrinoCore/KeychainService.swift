@@ -144,7 +144,14 @@ public enum KeychainService {
 
     // MARK: - Accessibility
 
-    private static let accessible = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    /// How every item this service writes is protected, for the running app.
+    ///
+    /// Public so a test can assert the promise rather than restating the constant, which would
+    /// pass just as happily against the wrong one. See `NeutrinoAppConfig.keychainAccessibility`
+    /// for why it is per-app.
+    public static var accessibility: CFString { NeutrinoApp.current.keychainAccessibility }
+
+    private static var accessible: CFString { accessibility }
 
     // MARK: - Save
 
@@ -237,6 +244,29 @@ public enum KeychainService {
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         guard status == errSecSuccess, let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    /// The accessibility attribute an item was actually stored with, or nil when there is no such
+    /// item.
+    ///
+    /// Exists so a test can assert the promise this type makes — that nothing it writes leaves the
+    /// device in a backup — rather than trusting that every write site remembered to pass it.
+    /// Photos was the only app with this; the guarantee is the same in all five.
+    ///
+    /// Reads the real Keychain even when a testing backend is installed, since an in-memory store
+    /// has no accessibility to report. It answers nil there rather than a misleading value.
+    public static func accessibility(forKey key: String) -> String? {
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrAccount: key,
+            kSecReturnAttributes: true,
+            kSecMatchLimit: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let attributes = result as? [CFString: Any] else { return nil }
+        return attributes[kSecAttrAccessible] as? String
     }
 
     // MARK: - Delete

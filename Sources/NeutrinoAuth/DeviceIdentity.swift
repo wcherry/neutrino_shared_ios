@@ -20,7 +20,6 @@ public enum DeviceIdentity {
     /// A user-set override wins; otherwise the device's own name is used. The app's display name
     /// is appended so the sessions list can tell the five apps apart, which all report an
     /// identical `UIDevice.name` on the same hardware.
-    @MainActor
     public static var deviceName: String {
         if let custom = UserDefaults.standard.string(forKey: NeutrinoApp.current.deviceNameKey),
            !custom.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -88,7 +87,6 @@ public struct DeviceSession: Identifiable, Hashable, Decodable, Sendable {
     /// True when this row is the device the app is running on, matched by the name it registered
     /// under. The server does not mark the caller's own session, and the session id is not
     /// something the token exchange hands back, so the registered name is the only join available.
-    @MainActor
     public var isCurrentDevice: Bool {
         deviceName == DeviceIdentity.deviceName
     }

@@ -12,15 +12,27 @@ import NeutrinoCrypto
 ///
 /// `showQRScan` replaces each app's own `FeatureFlags.qrKeyScan`, which is the only thing the
 /// five copies of this screen disagreed about.
+///
+/// Presented either way: Docs and Sheets show it as a sheet bound to an `isPresented` flag, Photos
+/// pushes it onto a `NavigationStack`. Hence the optional binding — `dismiss()` handles both, and
+/// the binding is written back only when a caller supplied one.
 public struct KeyImportView: View {
 
-    @Binding private var isPresented: Bool
+    private let isPresented: Binding<Bool>?
 
     private let showQRScan: Bool
 
-    public init(isPresented: Binding<Bool>, showQRScan: Bool = true) {
-        self._isPresented = isPresented
+    public init(isPresented: Binding<Bool>? = nil, showQRScan: Bool = true) {
+        self.isPresented = isPresented
         self.showQRScan = showQRScan
+    }
+
+    @Environment(\.dismiss) private var dismiss
+
+    /// Closes the screen however it was presented.
+    private func close() {
+        isPresented?.wrappedValue = false
+        dismiss()
     }
 
     @State private var showFilePicker = false
@@ -101,7 +113,7 @@ public struct KeyImportView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { isPresented = false }
+                    Button("Close") { close() }
                 }
             }
             .fileImporter(isPresented: $showFilePicker,
@@ -118,7 +130,7 @@ public struct KeyImportView: View {
                     archiveMessage = note
                     Task {
                         try? await Task.sleep(nanoseconds: 800_000_000)
-                        isPresented = false
+                        close()
                     }
                 }
             }
@@ -166,7 +178,7 @@ public struct KeyImportView: View {
         Task {
             await pullKeyFile()
             try? await Task.sleep(nanoseconds: 800_000_000)
-            isPresented = false
+            close()
         }
     }
 

@@ -39,6 +39,13 @@ public enum KeyQRDecryptService {
 
     private static let sodium = Sodium()
 
+    /// Iterations to assume when the envelope carries no `iter` field.
+    ///
+    /// An older web build omitted it and used 600 000. The number has to match exactly: PBKDF2
+    /// with a different count derives a different key, so a smaller "safe" fallback would not fail
+    /// loudly — it would decrypt to nothing and read as a wrong PIN.
+    public static let defaultIterations = 600_000
+
     /// Decrypt a QR code string using the provided PIN and return the plaintext key data.
     ///
     /// Expected QR JSON format:
@@ -89,8 +96,8 @@ public enum KeyQRDecryptService {
             throw KeyQRDecryptError.base64DecodeFailure
         }
 
-        // Step 5: Read iteration count (fall back to 600 000 if absent).
-        let iterations = json["iter"] as? Int ?? 600_000
+        // Step 5: Read iteration count, falling back for envelopes that predate the field.
+        let iterations = json["iter"] as? Int ?? defaultIterations
 
         // Step 6: Derive 32-byte key with PBKDF2-SHA256.
         guard let key = pbkdf2SHA256(password: pin, salt: saltData, iterations: iterations, keyLength: 32) else {

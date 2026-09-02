@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 // MARK: - The five apps
 
@@ -56,6 +57,9 @@ public extension NeutrinoAppConfig {
         keychainPrefix: "nn",
         oauthClientID: "neutrino-notes-ios",
         defaultHost: "https://www.getneutrino.app",
+        // Notes shipped with the stricter `WhenUnlocked` and has no background transfer path that
+        // needs to read a token on a locked device. Adopting this package must not downgrade it.
+        keychainAccessibility: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         supportsRegistration: true,
         supportsTwoFactor: false
     )

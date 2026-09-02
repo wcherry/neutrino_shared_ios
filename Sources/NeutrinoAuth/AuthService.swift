@@ -36,6 +36,31 @@ public enum AuthError: LocalizedError, Equatable {
     }
 }
 
+// MARK: - UserProfile
+
+/// The signed-in account, as `GET /api/v1/auth/me` reports it.
+///
+/// The server serializes this one camelCase already, so it needs no key strategy — only
+/// `DriveDate`'s date handling, because `created_at` is a zone-less `NaiveDateTime`.
+public struct UserProfile: Decodable, Equatable, Sendable {
+    public let id: String
+    public let email: String
+    public let name: String
+    public let createdAt: Date
+    public let role: String
+    public let totpEnabled: Bool
+
+    public init(id: String, email: String, name: String,
+                createdAt: Date, role: String, totpEnabled: Bool) {
+        self.id = id
+        self.email = email
+        self.name = name
+        self.createdAt = createdAt
+        self.role = role
+        self.totpEnabled = totpEnabled
+    }
+}
+
 // MARK: - AuthService
 
 /// Three-step OAuth PKCE flow (no browser required), shared by every Neutrino iOS app:
@@ -85,6 +110,13 @@ public final class AuthService: ObservableObject {
     /// to the start.
     @Published public var requiresTwoFactorCode: Bool = false
 
+    /// The signed-in account, once `GET /auth/me` has answered.
+    ///
+    /// Came from Photos, the only app that loaded it. It is not part of the exchange and
+    /// nothing is gated on it — every request is addressed by the token's `sub` claim — so this
+    /// exists to show the user which account they are in.
+    @Published public private(set) var profile: UserProfile?
+
     /// True from the moment this session creates an account until encryption setup is done or
     /// declined. Deliberately not persisted: a key that was skipped is offered again from
     /// Settings, not by a flag that outlives the launch that set it.
@@ -104,6 +136,7 @@ public final class AuthService: ObservableObject {
     public nonisolated static var serverHostKey:   String { NeutrinoApp.current.serverHostKey }
     public nonisolated static var defaultHost:     String { NeutrinoApp.current.defaultHost }
 
+    private var meURL:        String { Self.baseURL + "/api/v1/auth/me" }
     private var registerURL:  String { Self.baseURL + "/api/v1/auth/register" }
     private var loginURL:     String { Self.baseURL + "/api/v1/auth/login" }
     private var authorizeURL: String { Self.baseURL + "/api/v1/oauth/authorize" }
@@ -150,6 +183,9 @@ public final class AuthService: ObservableObject {
             try await signIn(email: email, password: password, totpCode: totpCode)
             requiresTwoFactorCode = false
             logger.debug("login succeeded")
+            // Deliberately after the exchange: the session is established whether or not this
+            // answers, so a failure here must not fail the login.
+            await loadProfile()
         } catch AuthError.twoFactorRequired {
             // Only a prompt on the first pass. Once the field is on screen, an unaccepted code
             // comes back the same way, and repeating "enter the code" reads as though nothing
@@ -215,6 +251,7 @@ public final class AuthService: ObservableObject {
         registerError = nil
         requiresTwoFactorCode = false
         didRegisterThisSession = false
+        profile = nil
         logger.debug("logged out")
     }
 
@@ -259,6 +296,47 @@ public final class AuthService: ObservableObject {
             // Anything else (offline, 5xx) leaves the existing token in place: an unreachable
             // server is not a reason to sign somebody out of an offline-first app.
             logger.error("refresh failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Loads the signed-in account from `GET /api/v1/auth/me` and publishes it as `profile`.
+    ///
+    /// Called after a successful sign-in, and worth calling once at launch for a session restored
+    /// from the Keychain. It answers nil on failure rather than throwing: the app is usable
+    /// without knowing the account's display name.
+    ///
+    /// A 401 is the exception. `refreshTokenIfNeeded` has already run, so a token still rejected
+    /// here is revoked rather than stale, and the session is over.
+    @discardableResult
+    public func loadProfile() async -> UserProfile? {
+        guard let url = URL(string: meURL) else { return nil }
+        await refreshTokenIfNeeded()
+        guard let token = accessToken() else { return nil }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, response) = try await perform(request, on: session)
+            guard let http = response as? HTTPURLResponse else { return nil }
+
+            if http.statusCode == 401 {
+                logger.error("profile rejected; signing out")
+                logout()
+                return nil
+            }
+            guard (200...299).contains(http.statusCode) else {
+                throw AuthError.serverError(statusCode: http.statusCode)
+            }
+
+            let profile = try DriveDate.makeDecoder().decode(UserProfile.self, from: data)
+            self.profile = profile
+            logger.debug("profile loaded")
+            return profile
+        } catch {
+            // Offline, 5xx, or a shape this build does not know.
+            logger.error("profile load failed: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
     }
 
