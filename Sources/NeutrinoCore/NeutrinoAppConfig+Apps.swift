@@ -71,7 +71,10 @@ public extension NeutrinoAppConfig {
         oauthClientID: "neutrino-photos-ios",
         defaultHost: "https://www.getneutrino.app",
         supportsRegistration: true,
-        supportsTwoFactor: false
+        supportsTwoFactor: false,
+        // Photos is the only app that shows the signed-in account, and the only one whose sign-in
+        // already made this call.
+        loadsProfileOnLogin: true
     )
 
     /// Every shipped app. Exists so the collision test cannot silently miss one that was added

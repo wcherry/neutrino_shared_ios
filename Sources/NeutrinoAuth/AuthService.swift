@@ -185,7 +185,7 @@ public final class AuthService: ObservableObject {
             logger.debug("login succeeded")
             // Deliberately after the exchange: the session is established whether or not this
             // answers, so a failure here must not fail the login.
-            await loadProfile()
+            if config.loadsProfileOnLogin { await loadProfile() }
         } catch AuthError.twoFactorRequired {
             // Only a prompt on the first pass. Once the field is on screen, an unaccepted code
             // comes back the same way, and repeating "enter the code" reads as though nothing

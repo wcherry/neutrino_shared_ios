@@ -82,6 +82,14 @@ public struct NeutrinoAppConfig: Sendable {
     /// statement about the server.
     public let supportsRegistration: Bool
 
+    /// Whether a successful sign-in should also fetch `GET /auth/me`.
+    ///
+    /// Only Photos did this, and only Photos shows the account anywhere. It is off by default
+    /// because the other four encode "login is exactly three requests" in their tests, and quietly
+    /// adding a fourth to every app's sign-in is not something adopting this package should do.
+    /// An app that wants the profile without the automatic fetch can call `loadProfile()` itself.
+    public let loadsProfileOnLogin: Bool
+
     /// Whether sign-in should handle a TOTP challenge. Drive's `AuthService` grew this; the flow
     /// is harmless when the account has no second factor, so the flag exists to keep the code
     /// field off screens whose apps have not been through 2FA QA yet.
@@ -99,7 +107,8 @@ public struct NeutrinoAppConfig: Sendable {
                 keychainAccessGroup: String? = nil,
                 keychainAccessibility: CFString = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
                 supportsRegistration: Bool = true,
-                supportsTwoFactor: Bool = true) {
+                supportsTwoFactor: Bool = true,
+                loadsProfileOnLogin: Bool = false) {
         self.slug = slug
         self.displayName = displayName
         self.keychainPrefix = keychainPrefix
@@ -111,6 +120,7 @@ public struct NeutrinoAppConfig: Sendable {
         self.keychainAccessibility = keychainAccessibility
         self.supportsRegistration = supportsRegistration
         self.supportsTwoFactor = supportsTwoFactor
+        self.loadsProfileOnLogin = loadsProfileOnLogin
     }
 
     // MARK: - Derived keys
