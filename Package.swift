@@ -11,6 +11,10 @@ import PackageDescription
 //   NeutrinoAuth    + the OAuth/PKCE flow and device registration.
 //   NeutrinoCrypto  + libsodium. The identity keypair and everything sealed to it.
 //   NeutrinoUI      + SwiftUI. Login, register, key import, lock screen.
+//   NeutrinoOOXML   Foundation + Compression. The `.docx` a document is stored as.
+//
+// NeutrinoOOXML deliberately depends on nothing else here: it is a file format, not a client, and
+// Sheets and Slides need the same zip and XML plumbing for `.xlsx` and `.pptx`.
 let package = Package(
     name: "NeutrinoShared",
     platforms: [.iOS(.v16)],
@@ -19,6 +23,7 @@ let package = Package(
         .library(name: "NeutrinoAuth",   targets: ["NeutrinoAuth"]),
         .library(name: "NeutrinoCrypto", targets: ["NeutrinoCrypto"]),
         .library(name: "NeutrinoUI",     targets: ["NeutrinoUI"]),
+        .library(name: "NeutrinoOOXML",  targets: ["NeutrinoOOXML"]),
     ],
     dependencies: [
         .package(url: "https://github.com/jedisct1/swift-sodium", from: "0.9.1"),
@@ -35,10 +40,12 @@ let package = Package(
             ]
         ),
         .target(name: "NeutrinoUI", dependencies: ["NeutrinoCore", "NeutrinoAuth", "NeutrinoCrypto"]),
+        .target(name: "NeutrinoOOXML"),
 
         .testTarget(name: "NeutrinoCoreTests",   dependencies: ["NeutrinoCore"]),
         .testTarget(name: "NeutrinoAuthTests",   dependencies: ["NeutrinoAuth", "NeutrinoCore"]),
         .testTarget(name: "NeutrinoCryptoTests", dependencies: ["NeutrinoCrypto", "NeutrinoCore"]),
         .testTarget(name: "NeutrinoUITests",     dependencies: ["NeutrinoUI"]),
+        .testTarget(name: "NeutrinoOOXMLTests",  dependencies: ["NeutrinoOOXML"]),
     ]
 )
