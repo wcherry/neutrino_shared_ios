@@ -24,6 +24,15 @@ public struct NeutrinoAppConfig: Sendable {
     /// the registered device name so the account's device list can tell the apps apart.
     public let displayName: String
 
+    /// What this app calls the things it holds, lowercase and plural — `"documents"`,
+    /// `"spreadsheets"`, `"notes"`.
+    ///
+    /// Exists because the encryption screens are shared and their copy is not generic filler: "this
+    /// kit is the only way back into your spreadsheets" is what a user needs to read to understand
+    /// what they are about to lose, and "your content" is not that sentence. Defaults to `"files"`
+    /// so an app that has not thought about it still reads as English.
+    public let contentNoun: String
+
     // MARK: - Storage namespace
 
     /// Prefix on every Keychain account and `UserDefaults` key this package writes, without the
@@ -99,6 +108,7 @@ public struct NeutrinoAppConfig: Sendable {
 
     public init(slug: String,
                 displayName: String,
+                contentNoun: String = "files",
                 keychainPrefix: String,
                 oauthClientID: String,
                 defaultHost: String,
@@ -111,6 +121,7 @@ public struct NeutrinoAppConfig: Sendable {
                 loadsProfileOnLogin: Bool = false) {
         self.slug = slug
         self.displayName = displayName
+        self.contentNoun = contentNoun
         self.keychainPrefix = keychainPrefix
         self.oauthClientID = oauthClientID
         self.defaultHost = defaultHost
