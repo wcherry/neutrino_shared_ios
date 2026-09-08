@@ -11,10 +11,15 @@ import PackageDescription
 //   NeutrinoAuth    + the OAuth/PKCE flow and device registration.
 //   NeutrinoCrypto  + libsodium. The identity keypair and everything sealed to it.
 //   NeutrinoUI      + SwiftUI. Login, register, key import, lock screen.
-//   NeutrinoOOXML   Foundation + Compression. The `.docx` a document is stored as.
+//   NeutrinoOOXML   Foundation + Compression. Zip and XML plumbing, and the `.docx` reader.
 //
-// NeutrinoOOXML deliberately depends on nothing else here: it is a file format, not a client, and
-// Sheets and Slides need the same zip and XML plumbing for `.xlsx` and `.pptx`.
+// NeutrinoOOXML deliberately depends on nothing else here: it is a file format, not a client.
+//
+// What earns its place in it is the plumbing every OOXML format needs — `Zip/` and `XML/` — which
+// is what Sheets links it for and what Slides will link it for. A single app's format mapping does
+// not: the `.xlsx` reader and writer live in `neutrino_sheets_ios_mobile` next to the editor that
+// is their only caller, because a package six apps rebuild against on save should carry nothing
+// only one of them uses. `Docx/` predates that line and is the same question, still open.
 let package = Package(
     name: "NeutrinoShared",
     platforms: [.iOS(.v16)],
