@@ -94,10 +94,14 @@ public enum NeutrinoAppLink {
         ///   and in Drive's `DriveItem.NeutrinoMIME`.
         ///
         /// Diagrams and Drawings have no OOXML counterpart and keep their own JSON.
+        ///
+        /// A **note** has none of these vintages: it is stored as Markdown and carries the
+        /// standard `text/markdown`, so a `.md` uploaded to Drive opens in Notes like one Notes
+        /// wrote. It is the one kind whose stored bytes are readable without us.
         public var mimeTypes: [String] {
             switch self {
             case .file:    return []
-            case .note:    return ["application/x-neutrino-note", "application/vnd.neutrino.note"]
+            case .note:    return ["text/markdown"]
             case .doc:     return [OOXML.docx, "application/x-neutrino-doc", "application/vnd.neutrino.doc"]
             case .sheet:   return [OOXML.xlsx, "application/x-neutrino-sheet", "application/vnd.neutrino.sheet"]
             case .slide:   return [OOXML.pptx, "application/x-neutrino-slide", "application/vnd.neutrino.slide"]
