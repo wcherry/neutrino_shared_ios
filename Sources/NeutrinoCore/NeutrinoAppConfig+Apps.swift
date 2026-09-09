@@ -19,6 +19,7 @@ public extension NeutrinoAppConfig {
     static let drive = NeutrinoAppConfig(
         slug: "drive",
         displayName: "Neutrino Drive",
+        contentNoun: "files",
         keychainPrefix: "nd",
         oauthClientID: "neutrino-ios",
         defaultHost: "http://localhost:8080",
@@ -32,6 +33,7 @@ public extension NeutrinoAppConfig {
     static let docs = NeutrinoAppConfig(
         slug: "docs",
         displayName: "Neutrino Docs",
+        contentNoun: "documents",
         keychainPrefix: "ndoc",
         oauthClientID: "neutrino-docs-ios",
         defaultHost: "https://www.getneutrino.app",
@@ -44,6 +46,7 @@ public extension NeutrinoAppConfig {
     static let sheets = NeutrinoAppConfig(
         slug: "sheets",
         displayName: "Neutrino Sheets",
+        contentNoun: "spreadsheets",
         keychainPrefix: "nsheet",
         oauthClientID: "neutrino-sheets-ios",
         defaultHost: "https://www.getneutrino.app",
@@ -54,6 +57,7 @@ public extension NeutrinoAppConfig {
     static let notes = NeutrinoAppConfig(
         slug: "notes",
         displayName: "Neutrino Notes",
+        contentNoun: "notes",
         keychainPrefix: "nn",
         oauthClientID: "neutrino-notes-ios",
         defaultHost: "https://www.getneutrino.app",
@@ -67,6 +71,7 @@ public extension NeutrinoAppConfig {
     static let photos = NeutrinoAppConfig(
         slug: "photos",
         displayName: "Neutrino Photos",
+        contentNoun: "photos",
         keychainPrefix: "nphoto",
         oauthClientID: "neutrino-photos-ios",
         defaultHost: "https://www.getneutrino.app",
@@ -80,6 +85,7 @@ public extension NeutrinoAppConfig {
     static let slides = NeutrinoAppConfig(
         slug: "slides",
         displayName: "Neutrino Slides",
+        contentNoun: "presentations",
         keychainPrefix: "nslide",
         oauthClientID: "neutrino-slides-ios",
         defaultHost: "https://www.getneutrino.app",
