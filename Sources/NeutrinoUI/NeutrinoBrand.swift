@@ -116,7 +116,12 @@ public extension NeutrinoBrand {
 
     static let drive = NeutrinoBrand(
         title: "Neutrino Drive",
-        logoSymbol: "externaldrive.fill.badge.wifi",
+        // A drive on a connection line — macOS's own mark for a mounted network volume,
+        // which is what Neutrino Drive is once the File Provider extension surfaces it in
+        // Finder. It replaces `externaldrive.fill.badge.wifi`, a portable bus-powered disk:
+        // the wrong kind of drive, and at icon size its wifi arcs collided with the body
+        // badly enough to read as some other appliance entirely.
+        logoSymbol: "externaldrive.connected.to.line.below.fill",
         tagline: "Secure encrypted file storage",
         gradient: [Color(.systemIndigo), Color(.systemBlue)],
         trustRows: [
