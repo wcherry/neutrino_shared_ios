@@ -155,6 +155,14 @@ public struct NeutrinoAppConfig: Sendable {
         public static let privateKey   = "encryption.private_key"
         public static let keyVersion   = "encryption.key_version"
         public static let archivedKeys = "encryption.archived_keys"
+
+        /// The whole identity keyring, every version, as one item — see `KeyringStore`.
+        ///
+        /// Deliberately *not* a replacement spelling for the three above. An app is on one model
+        /// or the other: the split store (`publicKey`/`privateKey`/`keyVersion` plus
+        /// `archivedKeys`) or this. Reading both would produce two answers to "which key is
+        /// active" with nothing to arbitrate between them.
+        public static let keyring      = "encryption.keyring"
     }
 
     public var accessTokenKey:  String { key(Key.accessToken) }
@@ -166,6 +174,7 @@ public struct NeutrinoAppConfig: Sendable {
     public var privateKeyKey:   String { key(Key.privateKey) }
     public var keyVersionKey:   String { key(Key.keyVersion) }
     public var archivedKeysKey: String { key(Key.archivedKeys) }
+    public var keyringKey:      String { key(Key.keyring) }
 
     /// Log subsystem, falling back to the slug when the bundle has no identifier (unit tests).
     public var logSubsystem: String {

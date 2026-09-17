@@ -56,6 +56,13 @@ public struct KeyFileResponseDTO: Codable, Sendable {
     public let keys: [ArchivedKeyDTO]
     public let createdAt: String
     public let updatedAt: String
+
+    public init(userId: String, keys: [ArchivedKeyDTO], createdAt: String, updatedAt: String) {
+        self.userId = userId
+        self.keys = keys
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
 }
 
 // MARK: - Outcome
@@ -174,6 +181,10 @@ public final class KeyFileService {
     /// the only key that opens the file. It is safe to call again — the whole set is rebuilt each
     /// time — so a launch-time top-up costs one request and repairs a device that was offline when
     /// its key arrived, or that enrolled before any of this existed.
+    ///
+    /// This is the split-store form, which lands the recovered keys in `KeyArchive`. An app on the
+    /// keyring model wants `restoreArchivedKeys(using:)` below — the fetch and the unsealing are
+    /// the same, only the sink differs.
     @discardableResult
     public func restoreArchivedKeys(authService: AuthService? = nil) async throws -> KeyFileRestoreOutcome {
         guard let active = KeyImportService.storedKeys(),
@@ -223,6 +234,109 @@ public final class KeyFileService {
 
         logger.info("restoreArchivedKeys: recovered=\(outcome.recovered, privacy: .public) held=\(outcome.alreadyHeld, privacy: .public) unopenable=\(outcome.unopenable, privacy: .public)")
         return outcome
+    }
+
+    // MARK: - Restore, keyring model
+
+    /// Fetch the account's key file and merge whatever it yields into this device's keyring.
+    ///
+    /// Call this after a key arrives from anywhere — the key code, the recovery kit, a paired
+    /// device — because in every one of those cases the device has just acquired the active key,
+    /// which is the only thing that opens the file.
+    ///
+    /// The same request and the same unsealing as the split-store form above; the difference is
+    /// that recovered versions are merged into the stored `Keyring` rather than written to
+    /// `KeyArchive`.
+    @discardableResult
+    public func restoreArchivedKeys(using authService: AuthService) async throws -> KeyFileRestoreOutcome {
+        self.authService = authService
+
+        guard let keyring = KeyringStore.shared.load(), let active = keyring.active else {
+            throw KeyFileError.noEncryptionKey
+        }
+        guard let response = try await fetch(authService: authService) else {
+            logger.info("restoreArchivedKeys: no key file stored for this account")
+            return KeyFileRestoreOutcome(serverHasNoKeyFile: true)
+        }
+
+        let plan = Self.plan(response: response, keyring: keyring, active: active)
+        let outcome = plan.outcome
+
+        if outcome.unopenable > 0 {
+            logger.error("restoreArchivedKeys: \(outcome.unopenable, privacy: .public) entr(ies) did not open with active version \(active.version, privacy: .public)")
+        }
+
+        if !plan.entries.isEmpty {
+            let merged = Keyring(userId: keyring.userId,
+                                 entries: (keyring.entries + plan.entries).sorted { $0.version < $1.version })
+            guard KeyringStore.shared.store(merged) else { throw KeyFileError.couldNotStore }
+        }
+
+        logger.info("restoreArchivedKeys: recovered=\(outcome.recovered, privacy: .public) held=\(outcome.alreadyHeld, privacy: .public) unopenable=\(outcome.unopenable, privacy: .public)")
+        return outcome
+    }
+
+    /// What a fetched key file yields against a keyring.
+    ///
+    /// The pure half of `restoreArchivedKeys(using:)`, split out so the decisions that matter —
+    /// which entries open, which are already held, whether the active key is stale — can be tested
+    /// against real ciphertext with no network in the way.
+    ///
+    /// Unlike the split-store `plan`, versions already in the keyring are counted and skipped
+    /// rather than re-unsealed: the keyring is replaced wholesale on write, so an entry that is
+    /// already there is already correct.
+    public nonisolated static func plan(response: KeyFileResponseDTO,
+                                        keyring: Keyring,
+                                        active: KeyringEntry)
+    -> (outcome: KeyFileRestoreOutcome, entries: [KeyringEntry]) {
+        var outcome = KeyFileRestoreOutcome()
+        var recovered: [KeyringEntry] = []
+
+        // Retired keys are the only thing in the file, so our "active" appearing in it means it is
+        // not active any more. See `activeIsStale`.
+        outcome.activeIsStale = response.keys.contains { $0.keyVersion >= active.version }
+
+        for key in response.keys {
+            if keyring.entry(forVersion: key.keyVersion) != nil {
+                outcome.alreadyHeld += 1
+                continue
+            }
+            guard let entry = entry(from: key,
+                                    active: active,
+                                    createdAt: response.createdAt,
+                                    retiredAt: response.updatedAt) else {
+                // Almost always an entry sealed to a version newer than the one in hand, which
+                // reads as a decryption failure but really means "this device's key is not the
+                // newest one".
+                outcome.unopenable += 1
+                continue
+            }
+            recovered.append(entry)
+            outcome.recovered += 1
+        }
+        return (outcome, recovered)
+    }
+
+    /// Open one archived key with the active keyring entry.
+    ///
+    /// Delegates the actual unsealing to `open(_:publicKey:secretKey:)`, so the checks that keep a
+    /// tampered entry out — secret-key length, and the declared public half matched against the one
+    /// derived from the secret — apply identically on both storage models.
+    public nonisolated static func entry(from key: ArchivedKeyDTO,
+                                         active: KeyringEntry,
+                                         createdAt: String,
+                                         retiredAt: String) -> KeyringEntry? {
+        guard let pair = open(key, publicKey: active.publicKey, secretKey: active.secretKey),
+              let publicKey = SealedKeyCoding.decode(pair.publicKey),
+              let secretKey = SealedKeyCoding.decode(pair.privateKey)
+        else {
+            return nil
+        }
+        return KeyringEntry(version: pair.version,
+                            publicKey: publicKey,
+                            secretKey: secretKey,
+                            createdAt: createdAt,
+                            retiredAt: retiredAt)
     }
 
     // MARK: - Unsealing

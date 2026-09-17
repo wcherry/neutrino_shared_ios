@@ -112,11 +112,42 @@ public enum KeyImportService {
 
     // MARK: - Storage
 
-    /// Persists a validated bundle to the Keychain.
+    /// Persists a validated bundle to the Keychain, in the split store.
+    ///
+    /// The three-item form: this bundle is the *active* keypair, and retired versions live beside
+    /// it in `KeyArchive`. An app on the keyring model wants `storeKeys(_:userId:)` instead — see
+    /// the note on the two models in `Keyring.swift`.
     public static func storeKeys(_ bundle: KeyBundle) {
         KeychainService.save(bundle.publicKey,  forKey: publicKeyKeychainKey)
         KeychainService.save(bundle.privateKey, forKey: privateKeyKeychainKey)
         KeychainService.save(bundle.keyVersion, forKey: keyVersionKeychainKey)
+    }
+
+    /// Adopt an imported keypair as this device's keyring and store it.
+    ///
+    /// Adopted rather than replaced: the imported key is the identity everything in that account is
+    /// already sealed to, so minting a fresh one here would orphan every file.
+    ///
+    /// `bundle.keyVersion` is honoured, not ignored. It used to be, because the only thing that set
+    /// it was the deleted key vault, where the field held the *envelope format* version — a
+    /// different quantity that happened to share the name. The mobile key code sets it from the
+    /// keyring entry it exported, so on a rotated account it is the real version and filing the key
+    /// under 1 would make every recent file unopenable.
+    ///
+    /// This installs the active entry only. The account's retired versions come from
+    /// `KeyFileService.restoreArchivedKeys(using:)`, which the caller runs next — it needs the key
+    /// stored here to open them.
+    @MainActor
+    @discardableResult
+    public static func storeKeys(_ bundle: KeyBundle, userId: String) -> Bool {
+        guard let publicKey = Base64URL.decode(bundle.publicKey),
+              let secretKey = Base64URL.decode(bundle.privateKey)
+        else { return false }
+        let keyring = KeyringCoder.fromKeyPair(userId: userId,
+                                               publicKey: publicKey,
+                                               secretKey: secretKey,
+                                               version: Int(bundle.keyVersion) ?? 1)
+        return KeyringStore.shared.store(keyring)
     }
 
     /// True when all three entries are present — "automatic key loading" is simply that the
@@ -124,8 +155,22 @@ public enum KeyImportService {
     ///
     /// Delegates to `NeutrinoStorage` so an extension that cannot link this module (and its
     /// libsodium dependency) still gets the same answer from the same implementation.
+    ///
+    /// Split store only. An app on the keyring model asks `hasStoredKeyring()` — these two read
+    /// different Keychain items and a keyring app calling this gets `false` with a key installed.
     public static func hasStoredKeys() -> Bool {
         NeutrinoStorage.hasStoredKeys()
+    }
+
+    /// True when this device holds a keyring.
+    ///
+    /// The keyring-model counterpart of `hasStoredKeys()`. Named apart rather than folded into it
+    /// because nothing in the package knows which model the running app is on, and a single
+    /// function that guessed would answer "do you have a key?" wrongly in whichever direction it
+    /// guessed — which is the question that decides whether the user is sent to enrolment.
+    @MainActor
+    public static func hasStoredKeyring() -> Bool {
+        KeyringStore.shared.hasKeyring
     }
 
     /// Reads the stored bundle back, or nil when any part is missing.
@@ -166,6 +211,11 @@ public enum KeyImportService {
         return .missingVersion(version)
     }
 
+    /// Forget the split store — the active keypair and the retired keys beside it.
+    ///
+    /// Split store only; a keyring app wants `removeKeyring()`. Calling the wrong one leaves the
+    /// key in place and reports success, which is the worst possible outcome for a button labelled
+    /// "remove my key from this device".
     public static func removeKeys() {
         KeychainService.delete(forKey: publicKeyKeychainKey)
         KeychainService.delete(forKey: privateKeyKeychainKey)
@@ -173,6 +223,15 @@ public enum KeyImportService {
         // The retired keys are worth no less than the active one and are opened by the same
         // person; forgetting the identity has to forget all of it.
         KeyArchive.clear()
+    }
+
+    /// Forget this device's keyring — every version at once, since they are one item.
+    ///
+    /// The keyring survives only where else it is held: another paired device, or the printed
+    /// recovery kit. There is no server copy to fetch back.
+    @MainActor
+    public static func removeKeyring() {
+        KeyringStore.shared.clear()
     }
 
     // MARK: - Validation

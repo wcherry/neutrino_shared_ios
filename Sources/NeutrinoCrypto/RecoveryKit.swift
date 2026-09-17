@@ -43,7 +43,10 @@ public enum RecoveryKit {
     // MARK: - Format
 
     /// Crockford base32 — no I, L, O or U.
-    private static let alphabet = Array("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
+    ///
+    /// Internal rather than private so `looksLikeKit`, in the keyring bridge beside this, can ask
+    /// whether a string is even in the alphabet without decoding it.
+    static let alphabet = Array("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
     private static let groupSize = 4
     private static let groupsPerLine = 8
 
