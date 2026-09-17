@@ -335,10 +335,15 @@ public struct BrandButton: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
-                .background(
+                // The `@ViewBuilder` form of `background`, and not `background(_:)`, deliberately.
+                // `LinearGradient` is both a `View` and a `ShapeStyle`; both protocols declare
+                // `opacity(_:)`, and `background(_:)` takes either — so the plain form has two
+                // equally good readings and the compiler refuses to pick ("ambiguous use of
+                // 'opacity'"). A `@ViewBuilder` closure admits only the `View` one.
+                .background {
                     LinearGradient(colors: brand.gradient, startPoint: .leading, endPoint: .trailing)
                         .opacity(isEnabled ? 1 : 0.5)
-                )
+                }
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .shadow(color: brand.accent.opacity(isEnabled ? 0.3 : 0), radius: 8, x: 0, y: 4)
             }

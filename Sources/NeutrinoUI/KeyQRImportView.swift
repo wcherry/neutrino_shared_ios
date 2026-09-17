@@ -15,6 +15,10 @@ import NeutrinoCrypto
 /// That last step is not optional dressing. The code carries one keypair, the account's active one,
 /// so without the pull a phone joining a rotated account opens everything written since the last
 /// rotation and nothing written before it: the documents list, download, and refuse to decrypt.
+///
+/// This is the **split-store** form: the key lands in the three Keychain items `KeyImportService`
+/// writes, with the retired versions in `KeyArchive` beside them. An app on the keyring model wants
+/// `KeyringQRImportView`, which is otherwise the same screen. See the note in `Keyring.swift`.
 public struct KeyQRImportView: View {
 
     @Binding private var isPresented: Bool
