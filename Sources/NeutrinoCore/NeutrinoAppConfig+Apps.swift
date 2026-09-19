@@ -15,6 +15,20 @@ import Security
 /// users out and orphans their imported encryption key.
 public extension NeutrinoAppConfig {
 
+    /// The Keychain access group every app declares, holding the identity keyring.
+    ///
+    /// Spelled once so the six configs cannot drift: two apps naming *almost* the same group is a
+    /// device where the key is shared with four apps out of six, which looks like a bug in the
+    /// fifth. The entitlement writes it as `$(AppIdentifierPrefix)com.neutrino.shared`; the team
+    /// prefix is added at runtime — see `KeychainService.bundleSeedPrefix()`.
+    ///
+    /// Note what opting in costs Notes: the shared item carries
+    /// `NeutrinoAppConfig.sharedKeyringAccessibility` (`AfterFirstUnlock`), not Notes' own stricter
+    /// `WhenUnlocked`, because one item has one accessibility and Drive's share extension reads it
+    /// on a locked device. Notes' tokens are unaffected. Setting this to nil for Notes is the
+    /// supported way to decline that trade; it then keeps a private keyring and imports its own.
+    static let sharedIdentityGroup = "com.neutrino.shared"
+
     /// Neutrino Drive. The only app with an extension, hence the only App Group.
     static let drive = NeutrinoAppConfig(
         slug: "drive",
@@ -25,6 +39,7 @@ public extension NeutrinoAppConfig {
         defaultHost: "http://localhost:8080",
         appGroupIdentifier: "group.com.neutrino.drive",
         keychainAccessGroup: "com.neutrino.drive.shared",
+        sharedKeychainAccessGroup: Self.sharedIdentityGroup,
         // Drive had no register screen; its login is the one that grew 2FA.
         supportsRegistration: true,
         supportsTwoFactor: true
@@ -37,6 +52,7 @@ public extension NeutrinoAppConfig {
         keychainPrefix: "ndoc",
         oauthClientID: "neutrino-docs-ios",
         defaultHost: "https://www.getneutrino.app",
+        sharedKeychainAccessGroup: Self.sharedIdentityGroup,
         supportsRegistration: true,
         // Docs' sign-in has never been through a 2FA account. The flow is harmless when the
         // account has no second factor, so this flips on once QA has an enrolled test account.
@@ -50,6 +66,7 @@ public extension NeutrinoAppConfig {
         keychainPrefix: "nsheet",
         oauthClientID: "neutrino-sheets-ios",
         defaultHost: "https://www.getneutrino.app",
+        sharedKeychainAccessGroup: Self.sharedIdentityGroup,
         supportsRegistration: true,
         supportsTwoFactor: false
     )
@@ -61,6 +78,7 @@ public extension NeutrinoAppConfig {
         keychainPrefix: "nn",
         oauthClientID: "neutrino-notes-ios",
         defaultHost: "https://www.getneutrino.app",
+        sharedKeychainAccessGroup: Self.sharedIdentityGroup,
         // Notes shipped with the stricter `WhenUnlocked` and has no background transfer path that
         // needs to read a token on a locked device. Adopting this package must not downgrade it.
         keychainAccessibility: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
@@ -75,6 +93,7 @@ public extension NeutrinoAppConfig {
         keychainPrefix: "nphoto",
         oauthClientID: "neutrino-photos-ios",
         defaultHost: "https://www.getneutrino.app",
+        sharedKeychainAccessGroup: Self.sharedIdentityGroup,
         supportsRegistration: true,
         supportsTwoFactor: false,
         // Photos is the only app that shows the signed-in account, and the only one whose sign-in
@@ -89,6 +108,7 @@ public extension NeutrinoAppConfig {
         keychainPrefix: "nslide",
         oauthClientID: "neutrino-slides-ios",
         defaultHost: "https://www.getneutrino.app",
+        sharedKeychainAccessGroup: Self.sharedIdentityGroup,
         supportsRegistration: true,
         supportsTwoFactor: false
     )

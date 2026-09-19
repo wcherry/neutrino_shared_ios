@@ -64,6 +64,23 @@ public struct NeutrinoAppConfig: Sendable {
     /// the extension cannot read it.
     public let keychainAccessGroup: String?
 
+    // MARK: - Shared identity
+
+    /// Keychain access group shared by *every* Neutrino app on the device. Carries the identity
+    /// keyring and nothing else — sessions stay namespaced by `keychainPrefix`, because an account
+    /// that is signed into Drive is not thereby signed into Notes.
+    ///
+    /// Distinct from `keychainAccessGroup`, which is Drive's app-to-extension group. Drive is in
+    /// both: its tokens go to the extension group, its keyring here.
+    ///
+    /// The identity is a property of the *account*, not of the app, so six copies of one keypair
+    /// on one device is six chances for a user to end up holding five and having lost the sixth.
+    /// Sharing it means an imported key reaches every app at once.
+    ///
+    /// `nil` opts the app out and it keeps a private keyring. Opting in means accepting
+    /// `sharedKeyringAccessibility`, which is why that is not a free choice — see below.
+    public let sharedKeychainAccessGroup: String?
+
     // MARK: - Keychain protection
 
     /// `kSecAttrAccessible` for every item this package writes.
@@ -115,6 +132,7 @@ public struct NeutrinoAppConfig: Sendable {
                 oauthRedirectURI: String = "neutrino://oauth/callback",
                 appGroupIdentifier: String? = nil,
                 keychainAccessGroup: String? = nil,
+                sharedKeychainAccessGroup: String? = nil,
                 keychainAccessibility: CFString = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
                 supportsRegistration: Bool = true,
                 supportsTwoFactor: Bool = true,
@@ -128,10 +146,41 @@ public struct NeutrinoAppConfig: Sendable {
         self.oauthRedirectURI = oauthRedirectURI
         self.appGroupIdentifier = appGroupIdentifier
         self.keychainAccessGroup = keychainAccessGroup
+        self.sharedKeychainAccessGroup = sharedKeychainAccessGroup
         self.keychainAccessibility = keychainAccessibility
         self.supportsRegistration = supportsRegistration
         self.supportsTwoFactor = supportsTwoFactor
         self.loadsProfileOnLogin = loadsProfileOnLogin
+    }
+
+    // MARK: - Shared keyring namespace
+
+    /// Protection for the shared keyring item.
+    ///
+    /// A package-level constant rather than a per-app one, unlike `keychainAccessibility`. One
+    /// Keychain item has one `kSecAttrAccessible`, so if Notes wrote the shared keyring under
+    /// `WhenUnlocked` then Drive's share extension would find it unreadable mid-upload on a locked
+    /// device — intermittently, and with no error that names the cause.
+    ///
+    /// `AfterFirstUnlock` is the weaker of the two, so this is a real cost to an app that had
+    /// chosen the stricter one. It is not resolved by softening this constant: an app unwilling to
+    /// pay it sets `sharedKeychainAccessGroup` to nil and keeps a private keyring. Still
+    /// `ThisDeviceOnly`, which is the half that is never negotiable.
+    public static let sharedKeyringAccessibility: CFString =
+        kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+
+    /// `kSecAttrService` on every shared item. Constant across the apps — it is what makes the
+    /// group enumerable, so an app can discover which accounts have a keyring on this device
+    /// without already knowing the answer.
+    public static let sharedKeychainService = "app.getneutrino.shared"
+
+    /// Account name of the shared keyring for one user.
+    ///
+    /// Carries the user id because co-installed apps can be signed into different accounts, and a
+    /// single shared name would hand Notes-as-A the identity of B. Readers verify the keyring's
+    /// own `userId` as well; this is the cheap half of that check, not a replacement for it.
+    public static func sharedKeyringAccount(forUserID id: String) -> String {
+        "encryption.keyring.\(id)"
     }
 
     // MARK: - Derived keys

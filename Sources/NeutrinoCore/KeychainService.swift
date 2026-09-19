@@ -15,7 +15,37 @@ import Security
 /// *ThisDeviceOnly* so neither the refresh token nor the identity secret key is ever carried off
 /// in an iCloud Keychain or encrypted-backup copy — an identity that rides along in a backup is an
 /// identity whose safety rests on the backup's, which is the property E2EE exists to remove.
+///
+/// ## Two namespaces
+///
+/// Items are written in one of two `Scope`s, and the difference is not cosmetic:
+///
+///   `.app`     `<prefix>.<name>` in this app's own group. Sessions live here, and they stay
+///              apart — signing into Docs must not sign anyone out of Drive.
+///   `.shared`  the identity keyring, in a group every Neutrino app declares. The keypair belongs
+///              to the *account*, not to the app, so six private copies of it on one device is six
+///              chances to end up holding five.
+///
+/// Reads of `.app` items are unqualified by group on purpose (see `load`), which is what let the
+/// extension group ship without a read-path migration and is what lets `.shared` work the same way.
 public enum KeychainService {
+
+    // MARK: - Scope
+
+    /// Which namespace an item belongs to.
+    ///
+    /// `.app` is everything that existed before sharing: a `keychainPrefix`-qualified account name
+    /// in the app's own group (or Drive's extension group), protected with that app's configured
+    /// accessibility.
+    ///
+    /// `.shared` is the cross-app identity keyring — one account name, one group, one
+    /// accessibility, visible to every Neutrino app on the device. It is a separate case rather
+    /// than a different key string because the two differ in more than naming: a shared write must
+    /// not fall back to the default group, and a shared delete reaches other apps.
+    public enum Scope: Sendable {
+        case app
+        case shared
+    }
 
     // MARK: - Backend
 
@@ -104,15 +134,95 @@ public enum KeychainService {
     /// permanently and every later call falls back to the default group — losing extension
     /// visibility, never losing the user's keys.
     nonisolated(unsafe) private static var resolvedAccessGroup: String? = resolveAccessGroup()
+    nonisolated(unsafe) private static var resolvedSharedGroup: String? = resolveSharedGroup()
     private static let lock = NSLock()
+
+    /// The team prefix the Keychain expects in front of an access group, e.g. `"46KWJJ63FU"`.
+    ///
+    /// No API reports it, so it is read back off an item we write ourselves: an item added with no
+    /// `kSecAttrAccessGroup` lands in the default group, and the default group's name is
+    /// `<TeamID>.<bundle id>`. Everything before the first dot is the prefix.
+    ///
+    /// This is why the group strings in `NeutrinoAppConfig` are written bare. The entitlement
+    /// spells them `$(AppIdentifierPrefix)com.neutrino.shared`; `SecItem` wants the expansion, and
+    /// hardcoding a team id in source is how a repo stops building under a different account.
+    private static func bundleSeedPrefix() -> String? {
+        let identify: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrAccount: "app.getneutrino.keychain.seed-probe"
+        ]
+
+        var attributes = identify
+        attributes[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        attributes[kSecValueData] = Data([0])
+        attributes[kSecReturnAttributes] = true
+
+        var result: AnyObject?
+        var status = SecItemAdd(attributes as CFDictionary, &result)
+        if status == errSecDuplicateItem {
+            var read = identify
+            read[kSecReturnAttributes] = true
+            read[kSecMatchLimit] = kSecMatchLimitOne
+            status = SecItemCopyMatching(read as CFDictionary, &result)
+        }
+        SecItemDelete(identify as CFDictionary)
+
+        guard status == errSecSuccess,
+              let group = (result as? [CFString: Any])?[kSecAttrAccessGroup] as? String,
+              let dot = group.firstIndex(of: ".")
+        else { return nil }
+        return String(group[..<dot])
+    }
+
+    /// Whether this binary can really write to `group`.
+    ///
+    /// A round trip rather than an inspection, because an entitlement can be present and still
+    /// unusable — a provisioning profile that does not carry the group, a group registered for a
+    /// different team. Finding that out lazily means finding it out on the one write that
+    /// mattered, which for the keyring is the write that follows an import the user cannot repeat.
+    private static func canWrite(to group: String) -> Bool {
+        let identify: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrAccount: "app.getneutrino.keychain.group-probe",
+            kSecAttrAccessGroup: group
+        ]
+        SecItemDelete(identify as CFDictionary)
+
+        var add = identify
+        add[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        add[kSecValueData] = Data([0])
+
+        guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else { return false }
+        SecItemDelete(identify as CFDictionary)
+        return true
+    }
 
     private static func resolveAccessGroup() -> String? {
         guard NeutrinoApp.isConfigured,
               let appGroup = NeutrinoApp.current.appGroupIdentifier,
               let keychainGroup = NeutrinoApp.current.keychainAccessGroup,
-              FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) != nil
+              FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) != nil,
+              let prefix = bundleSeedPrefix()
         else { return nil }
-        return keychainGroup
+
+        // Previously returned unqualified. That worked only because Drive lists exactly one group,
+        // which makes it Drive's *default* group — so even the entitlement-failure fallback landed
+        // in the right place by accident. With a second group declared that coincidence is gone.
+        let qualified = "\(prefix).\(keychainGroup)"
+        return canWrite(to: qualified) ? qualified : nil
+    }
+
+    /// The cross-app group, or nil when this app has opted out or cannot use it.
+    ///
+    /// Deliberately independent of `appGroupIdentifier`: keychain sharing needs no App Group, and
+    /// requiring one would mean registering a container that five of the six apps never open.
+    private static func resolveSharedGroup() -> String? {
+        guard NeutrinoApp.isConfigured,
+              let sharedGroup = NeutrinoApp.current.sharedKeychainAccessGroup,
+              let prefix = bundleSeedPrefix()
+        else { return nil }
+        let qualified = "\(prefix).\(sharedGroup)"
+        return canWrite(to: qualified) ? qualified : nil
     }
 
     /// Exposed for diagnostics and tests. `nil` means "default group".
@@ -122,18 +232,49 @@ public enum KeychainService {
         return resolvedAccessGroup
     }
 
-    /// Re-probes the entitlement. Call after `NeutrinoApp.configure(_:)` if anything may have
+    /// The cross-app group, or nil when this app opted out or the entitlement is unusable.
+    /// Exposed for diagnostics and tests.
+    public static var sharedAccessGroup: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return resolvedSharedGroup
+    }
+
+    /// Whether the identity keyring can be shared with the other Neutrino apps on this device.
+    ///
+    /// The UI asks this before offering to adopt or publish a key, so a build whose entitlement is
+    /// missing shows nothing rather than a button that fails.
+    public static var sharesIdentityAcrossApps: Bool { sharedAccessGroup != nil }
+
+    /// Re-probes the entitlements. Call after `NeutrinoApp.configure(_:)` if anything may have
     /// touched the Keychain first; the app's `init()` ordering normally makes this unnecessary.
     public static func reloadAccessGroup() {
         lock.lock()
         defer { lock.unlock() }
         resolvedAccessGroup = resolveAccessGroup()
+        resolvedSharedGroup = resolveSharedGroup()
     }
 
-    private static func disableSharedAccessGroup() {
+    /// Give up on the app-to-extension group. Items fall back to the default group from here on —
+    /// losing extension visibility, never losing the user's keys.
+    ///
+    /// Named for the group it disables: since the cross-app group arrived there are two, and they
+    /// fail independently. This one does not touch `resolvedSharedGroup`.
+    private static func disableExtensionAccessGroup() {
         lock.lock()
         defer { lock.unlock() }
         resolvedAccessGroup = nil
+    }
+
+    /// Give up on the cross-app group.
+    ///
+    /// Unlike the extension group there is no fallback, so this makes `sharesIdentityAcrossApps`
+    /// report false and the sharing UI disappear — which is the honest answer for a build whose
+    /// entitlement turns out to be unusable, and better than a button that fails every time.
+    private static func disableSharedIdentityGroup() {
+        lock.lock()
+        defer { lock.unlock() }
+        resolvedSharedGroup = nil
     }
 
     /// `errSecMissingEntitlement` / `errSecNoAccessForItem` mean the group is not usable by this
@@ -157,42 +298,91 @@ public enum KeychainService {
 
     /// Saves or updates a string value. Returns true on success.
     ///
-    /// With a shared group in effect the item is first deleted from *every* accessible group and
-    /// then added into the shared one. Without that, an item already in the default group would
-    /// coexist with a shared-group item under the same account, and `load` — which searches all
-    /// groups — could return either.
+    /// With a group in effect the item is first deleted and then added, rather than updated in
+    /// place: an item already in the default group would otherwise coexist with a group item under
+    /// the same account, and `load` — which searches all groups — could return either.
     @discardableResult
-    public static func save(_ value: String, forKey key: String) -> Bool {
-        if let backend = activeBackend { return backend.save(value, forKey: key) }
+    public static func save(_ value: String, forKey key: String, scope: Scope = .app) -> Bool {
+        if let backend = activeBackend {
+            return backend.save(value, forKey: backendKey(key, scope))
+        }
         guard let data = value.data(using: .utf8) else { return false }
 
-        guard let group = accessGroup else {
-            return saveInDefaultGroup(data, forKey: key)
+        switch scope {
+        case .app:
+            guard let group = accessGroup else {
+                return saveInDefaultGroup(data, forKey: key)
+            }
+            // Sweep the unqualified account too: for a per-app key the account string is
+            // prefix-namespaced, so this can only reach this app's own stale copy.
+            var deleteQuery: [CFString: Any] = [
+                kSecClass: kSecClassGenericPassword,
+                kSecAttrAccount: key
+            ]
+            SecItemDelete(deleteQuery as CFDictionary)
+            deleteQuery[kSecAttrAccessGroup] = group
+            SecItemDelete(deleteQuery as CFDictionary)
+
+            let status = addItem(data, forKey: key, group: group, accessible: accessible)
+            if status == errSecSuccess { return true }
+
+            if isEntitlementFailure(status) {
+                disableExtensionAccessGroup()
+                return saveInDefaultGroup(data, forKey: key)
+            }
+            return false
+
+        case .shared:
+            // No fallback to the default group, unlike `.app`. A keyring that quietly lands in one
+            // app's private namespace is indistinguishable from a shared one when read back by the
+            // app that wrote it; the breakage surfaces later, in a *different* app, as "my key
+            // disappeared". Failing the write lets the caller say so while the user is still here.
+            guard let group = sharedAccessGroup else { return false }
+
+            // Only the qualified delete. The shared account name is identical in every app, so an
+            // unqualified `SecItemDelete` from Notes would reach into the shared group and remove
+            // Drive's item before adding its own.
+            let deleteQuery: [CFString: Any] = [
+                kSecClass: kSecClassGenericPassword,
+                kSecAttrService: NeutrinoAppConfig.sharedKeychainService,
+                kSecAttrAccount: key,
+                kSecAttrAccessGroup: group
+            ]
+            SecItemDelete(deleteQuery as CFDictionary)
+
+            let status = addItem(data,
+                                 forKey: key,
+                                 group: group,
+                                 accessible: NeutrinoAppConfig.sharedKeyringAccessibility,
+                                 service: NeutrinoAppConfig.sharedKeychainService)
+            if isEntitlementFailure(status) { disableSharedIdentityGroup() }
+            return status == errSecSuccess
         }
+    }
 
-        var deleteQuery: [CFString: Any] = [
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrAccount: key
-        ]
-        SecItemDelete(deleteQuery as CFDictionary)
-        deleteQuery[kSecAttrAccessGroup] = group
-        SecItemDelete(deleteQuery as CFDictionary)
-
-        let addQuery: [CFString: Any] = [
+    private static func addItem(_ data: Data,
+                                forKey key: String,
+                                group: String,
+                                accessible: CFString,
+                                service: String? = nil) -> OSStatus {
+        var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrAccount: key,
             kSecAttrAccessGroup: group,
             kSecAttrAccessible: accessible,
             kSecValueData: data
         ]
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
-        if status == errSecSuccess { return true }
+        if let service { query[kSecAttrService] = service }
+        return SecItemAdd(query as CFDictionary, nil)
+    }
 
-        if isEntitlementFailure(status) {
-            disableSharedAccessGroup()
-            return saveInDefaultGroup(data, forKey: key)
+    /// Test backends are a flat dictionary with no notion of a group, so the scope has to travel
+    /// in the key or a shared and a per-app item under the same name would alias.
+    private static func backendKey(_ key: String, _ scope: Scope) -> String {
+        switch scope {
+        case .app: return key
+        case .shared: return "\(NeutrinoAppConfig.sharedKeychainService)/\(key)"
         }
-        return false
     }
 
     private static func saveInDefaultGroup(_ data: Data, forKey key: String) -> Bool {
@@ -231,19 +421,47 @@ public enum KeychainService {
     /// Deliberately queried **without** `kSecAttrAccessGroup`: an unqualified search spans every
     /// group in the caller's entitlement, so it finds items written before the shared group
     /// existed as well as after. That is why no read-path migration is needed.
-    public static func load(forKey key: String) -> String? {
-        if let backend = activeBackend { return backend.load(forKey: key) }
-        let query: [CFString: Any] = [
+    public static func load(forKey key: String, scope: Scope = .app) -> String? {
+        if let backend = activeBackend { return backend.load(forKey: backendKey(key, scope)) }
+        var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrAccount: key,
             kSecReturnData: true,
             kSecMatchLimit: kSecMatchLimitOne
         ]
+        // `.shared` is still an unqualified-by-group search — the entitlement bounds it — but it is
+        // qualified by service, so a per-app item can never answer a shared read.
+        if case .shared = scope {
+            query[kSecAttrService] = NeutrinoAppConfig.sharedKeychainService
+        }
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         guard status == errSecSuccess, let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    /// Every shared-keyring account name present on this device.
+    ///
+    /// Exists so an app can discover that a sibling already holds a key *before* it knows which
+    /// account that key belongs to — on a cold launch there is no profile fetched yet, and asking
+    /// the user to sign in to find out whether they need to sign in is the wrong order.
+    ///
+    /// Returns account strings, not user ids: the caller matches them against
+    /// `NeutrinoAppConfig.sharedKeyringAccount(forUserID:)` rather than parsing them apart.
+    public static func sharedAccounts() -> [String] {
+        if activeBackend != nil { return [] }
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: NeutrinoAppConfig.sharedKeychainService,
+            kSecReturnAttributes: true,
+            kSecMatchLimit: kSecMatchLimitAll
+        ]
+
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let items = result as? [[CFString: Any]] else { return [] }
+        return items.compactMap { $0[kSecAttrAccount] as? String }
     }
 
     /// The accessibility attribute an item was actually stored with, or nil when there is no such
@@ -255,13 +473,16 @@ public enum KeychainService {
     ///
     /// Reads the real Keychain even when a testing backend is installed, since an in-memory store
     /// has no accessibility to report. It answers nil there rather than a misleading value.
-    public static func accessibility(forKey key: String) -> String? {
-        let query: [CFString: Any] = [
+    public static func accessibility(forKey key: String, scope: Scope = .app) -> String? {
+        var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrAccount: key,
             kSecReturnAttributes: true,
             kSecMatchLimit: kSecMatchLimitOne
         ]
+        if case .shared = scope {
+            query[kSecAttrService] = NeutrinoAppConfig.sharedKeychainService
+        }
 
         var result: AnyObject?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
@@ -272,9 +493,26 @@ public enum KeychainService {
     // MARK: - Delete
 
     /// Deletes the item from every accessible group. True if at least one was found.
+    ///
+    /// - Important: `.shared` removes the identity keyring for **every** Neutrino app on the
+    ///   device, not just this one. Sign-out must pass `.app`; only an explicit "remove this
+    ///   device's encryption key" belongs on the shared scope. The default is `.app` for exactly
+    ///   this reason — the dangerous case is the one you have to name.
     @discardableResult
-    public static func delete(forKey key: String) -> Bool {
-        if let backend = activeBackend { return backend.delete(forKey: key) }
+    public static func delete(forKey key: String, scope: Scope = .app) -> Bool {
+        if let backend = activeBackend { return backend.delete(forKey: backendKey(key, scope)) }
+
+        if case .shared = scope {
+            guard let group = sharedAccessGroup else { return false }
+            let query: [CFString: Any] = [
+                kSecClass: kSecClassGenericPassword,
+                kSecAttrService: NeutrinoAppConfig.sharedKeychainService,
+                kSecAttrAccount: key,
+                kSecAttrAccessGroup: group
+            ]
+            return SecItemDelete(query as CFDictionary) == errSecSuccess
+        }
+
         var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrAccount: key
