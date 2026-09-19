@@ -225,13 +225,18 @@ public enum KeyImportService {
         KeyArchive.clear()
     }
 
-    /// Forget this device's keyring — every version at once, since they are one item.
+    /// Forget this device's keyring — every version at once, since they are one item, and every
+    /// app at once, since they share it.
     ///
     /// The keyring survives only where else it is held: another paired device, or the printed
     /// recovery kit. There is no server copy to fetch back.
+    ///
+    /// Device-wide rather than app-wide because that is what the button above it says. A user who
+    /// removes their key in Notes and finds Drive still holding it has been told something untrue,
+    /// and the copy they were not told about is the one nobody thinks to remove later.
     @MainActor
     public static func removeKeyring() {
-        KeyringStore.shared.clear()
+        KeyringStore.shared.removeKeyringEverywhere()
     }
 
     // MARK: - Validation
