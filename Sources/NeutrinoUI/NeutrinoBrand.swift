@@ -31,9 +31,24 @@ public struct NeutrinoBrand: Sendable {
 
     // MARK: - Colour
 
-    /// Two-stop gradient for the logo tile and the sign-in button. The first stop also tints the
-    /// progress spinner and the tile's shadow, so it should be the app's primary identity colour.
+    /// Two-stop gradient for the sign-in button. The first stop is also the app's `accent`, which
+    /// tints the progress spinner and the "Create Account" link, so it should be the app's primary
+    /// identity colour — and, because both of those put it against white or under white text, one
+    /// that is dark enough to read that way.
     public let gradient: [Color]
+
+    /// Two-stop gradient for the logo tile, when it differs from `gradient`.
+    ///
+    /// Defaults to `gradient`, which is what five of the six apps want: one identity colour, used
+    /// everywhere. It is separable because the tile is the one surface where the colour is pure
+    /// decoration — a large mark on a large field, with nothing small or textual on top — so it can
+    /// carry a colour that the button and the link cannot. Notes is yellow here and stays teal on
+    /// the button, because white 17pt on `systemYellow` is about 1.5:1 and unreadable, while the
+    /// same yellow behind a 40pt glyph is fine.
+    ///
+    /// Set it only when the two genuinely differ; an app that passes one gradient still gets one
+    /// gradient everywhere.
+    public let logoGradient: [Color]
 
     // MARK: - Trust rows
 
@@ -70,12 +85,14 @@ public struct NeutrinoBrand: Sendable {
                 logoImageName: String? = nil,
                 tagline: String = "Private by design. Encrypted on your device.",
                 gradient: [Color] = [Color(.systemIndigo), Color(.systemBlue)],
+                logoGradient: [Color]? = nil,
                 trustRows: [TrustRow] = NeutrinoBrand.defaultTrustRows) {
         self.title = title
         self.logoSymbol = logoSymbol
         self.logoImageName = logoImageName
         self.tagline = tagline
         self.gradient = gradient
+        self.logoGradient = logoGradient ?? gradient
         self.trustRows = trustRows
     }
 
@@ -83,6 +100,10 @@ public struct NeutrinoBrand: Sendable {
 
     /// The identity colour — the gradient's first stop, or indigo for a single-stop gradient.
     public var accent: Color { gradient.first ?? Color(.systemIndigo) }
+
+    /// The logo tile's own identity colour, for the glow cast behind it. Follows `logoGradient`
+    /// rather than `accent` so the glow matches the tile it comes from.
+    public var logoAccent: Color { logoGradient.first ?? accent }
 
     // MARK: - Registration
 
@@ -159,7 +180,23 @@ public extension NeutrinoBrand {
         title: "Neutrino Slides",
         logoSymbol: "rectangle.on.rectangle.angled",
         tagline: "Encrypted presentations you can show anywhere",
-        gradient: [Color(.systemOrange), Color(.systemYellow)],
+        // Red into a lighter red, the way docs runs blue into cyan. It was orange into yellow,
+        // which is now Notes' tile, and two tiles cannot share the same two stops.
+        //
+        // The second stop is a literal because the palette has no light red to reach for: iOS
+        // offers red, pink and orange, and of those pink is fractionally *darker* than red while
+        // orange is a different hue that photos already ends on. The value is picked for its fall
+        // — about 0.14 in relative luminance against red, where docs' blue into cyan falls 0.15,
+        // so this tile lightens by the same amount as the one it is modelled on.
+        //
+        // Held at blue 110 rather than lower. Lightening a red means desaturating it, since red
+        // starts with its red channel already at maximum; holding blue down keeps the saturation
+        // but bends the colour towards orange, and this set has two warm tiles already.
+        //
+        // Static, unlike the system colours either side of it. Dark mode would shift it by about
+        // as much as it shifts systemRed, which is nothing you would notice on a gradient, and the
+        // app icon it matches is a PNG that cannot shift at all.
+        gradient: [Color(.systemRed), Color(red: 1.0, green: 0.510, blue: 0.431)],
         trustRows: [
             TrustRow(icon: "lock.shield.fill",            title: "End-to-end encrypted",       color: Color(.systemGreen)),
             TrustRow(icon: "arrow.triangle.2.circlepath", title: "Synced with Neutrino Drive", color: Color(.systemBlue)),
@@ -172,6 +209,19 @@ public extension NeutrinoBrand {
         logoSymbol: "note.text",
         tagline: "Secure Markdown notes for the Neutrino ecosystem",
         gradient: [Color(.systemTeal), Color(.systemGreen)],
+        // Yellow, the colour a paper note is — on the tile only. It cannot be the app's `gradient`
+        // as well: that one backs the sign-in button under a white 17pt label and supplies `accent`
+        // for the "Create Account" link on white, and `systemYellow` is about 1.5:1 in both places,
+        // which is unreadable rather than merely low. Behind a 40pt glyph on a 96pt tile it is
+        // fine.
+        //
+        // Orange into yellow, not the reverse: every tile in the set runs dark stop into light one
+        // — indigo into blue, blue into cyan, pink into orange — so the light falls the same way
+        // across a home screen holding several of these. Yellow is the lightest colour in the
+        // palette, so the darker end of a yellow identity has to be orange.
+        //
+        // The app icon in `neutrino_notes_ios_mobile` is these same two stops, vertically.
+        logoGradient: [Color(.systemOrange), Color(.systemYellow)],
         trustRows: [
             TrustRow(icon: "lock.shield.fill",            title: "End-to-end encrypted",       color: Color(.systemGreen)),
             TrustRow(icon: "arrow.triangle.2.circlepath", title: "Synced with Neutrino Drive", color: Color(.systemTeal)),
