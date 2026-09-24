@@ -29,6 +29,9 @@ final class NeutrinoAppConfigTests: XCTestCase {
         // Docs shipped `ndoc.*`; the migration must not silently renamespace it.
         XCTAssertEqual(NeutrinoAppConfig.docs.accessTokenKey, "ndoc.access_token")
         XCTAssertEqual(NeutrinoAppConfig.docs.deviceNameKey,  "ndoc.device_name")
+
+        // Calendar's first build shipped `ncal.*`.
+        XCTAssertEqual(NeutrinoAppConfig.calendar.accessTokenKey, "ncal.access_token")
     }
 
     /// The property this whole design is for: no two apps may collide on any key.
