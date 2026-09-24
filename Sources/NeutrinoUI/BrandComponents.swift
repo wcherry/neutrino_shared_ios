@@ -21,12 +21,12 @@ public struct BrandLogo: View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.29, style: .continuous)
                 .fill(
-                    LinearGradient(colors: brand.gradient,
+                    LinearGradient(colors: brand.logoGradient,
                                    startPoint: .topLeading,
                                    endPoint: .bottomTrailing)
                 )
                 .frame(width: size, height: size)
-                .shadow(color: brand.accent.opacity(0.35), radius: size * 0.21, x: 0, y: size * 0.083)
+                .shadow(color: brand.logoAccent.opacity(0.35), radius: size * 0.21, x: 0, y: size * 0.083)
 
             if let imageName = brand.logoImageName {
                 Image(imageName)
