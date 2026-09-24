@@ -179,6 +179,23 @@ public extension NeutrinoBrand {
         ]
     )
 
+    static let calendar = NeutrinoBrand(
+        title: "Neutrino Calendar",
+        logoSymbol: "calendar",
+        tagline: "Your schedule, across every Neutrino device",
+        // Purple into pink: no other tile uses purple, and it runs dark stop into light like the
+        // rest of the set.
+        gradient: [Color(.systemPurple), Color(.systemPink)],
+        // No "End-to-end encrypted" row, unlike the other six. Calendar events are stored
+        // readable on the server — Google and Outlook sync needs them to be — so the claim would
+        // be false here. Attachments are Drive files and are encrypted, so that row is true.
+        trustRows: [
+            TrustRow(icon: "arrow.triangle.2.circlepath", title: "Synced with your Neutrino account",      color: Color(.systemBlue)),
+            TrustRow(icon: "calendar.badge.plus",         title: "Google, Outlook and iCloud in one place", color: Color(.systemPurple)),
+            TrustRow(icon: "paperclip",                   title: "Attachments encrypted in Drive",          color: Color(.systemGreen)),
+        ]
+    )
+
     static let photos = NeutrinoBrand(
         title: "Neutrino Photos",
         logoSymbol: "photo.on.rectangle.angled",

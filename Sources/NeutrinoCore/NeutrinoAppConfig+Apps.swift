@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-// MARK: - The six apps
+// MARK: - The apps
 
 /// The shipped configuration for each Neutrino iOS app.
 ///
@@ -113,7 +113,23 @@ public extension NeutrinoAppConfig {
         supportsTwoFactor: false
     )
 
+    /// The OAuth client is seeded by `neutrino/migrations/00135_oauth__*`, not by the original
+    /// `00095_oauth__*` that registered the other six.
+    static let calendar = NeutrinoAppConfig(
+        slug: "calendar",
+        displayName: "Neutrino Calendar",
+        contentNoun: "events",
+        keychainPrefix: "ncal",
+        oauthClientID: "neutrino-calendar-ios",
+        defaultHost: "https://www.getneutrino.app",
+        sharedKeychainAccessGroup: Self.sharedIdentityGroup,
+        supportsRegistration: true,
+        supportsTwoFactor: false
+    )
+
     /// Every shipped app. Exists so the collision test cannot silently miss one that was added
     /// without being registered.
-    static let allApps: [NeutrinoAppConfig] = [.drive, .docs, .sheets, .notes, .photos, .slides]
+    static let allApps: [NeutrinoAppConfig] = [
+        .drive, .docs, .sheets, .notes, .photos, .slides, .calendar,
+    ]
 }
