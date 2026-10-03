@@ -11,7 +11,8 @@
 // Runs crypto.ts under Node's type stripping (Node 23.5+, for `registerHooks`). Sealing is
 // randomized, so each run writes different ciphertext for the same places; commit the JSON only
 // when the cases change, and copy it to the web's
-// neutrino/web/packages/e2e-crypto/src/__tests__/fixtures/ so both sides test the same bytes.
+// neutrino/web/packages/e2e-crypto/src/__tests__/fixtures/ and the macOS client's
+// neutrino_drive_mac_desktop/tests/NeutrinoDriveTests/Fixtures/ so every reader tests the same bytes.
 
 import { createRequire, registerHooks } from 'node:module';
 import { writeFileSync } from 'node:fs';
