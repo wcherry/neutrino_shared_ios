@@ -49,7 +49,11 @@ let package = Package(
 
         .testTarget(name: "NeutrinoCoreTests",   dependencies: ["NeutrinoCore"]),
         .testTarget(name: "NeutrinoAuthTests",   dependencies: ["NeutrinoAuth", "NeutrinoCore"]),
-        .testTarget(name: "NeutrinoCryptoTests", dependencies: ["NeutrinoCrypto", "NeutrinoCore"]),
+        .testTarget(
+            name: "NeutrinoCryptoTests",
+            dependencies: ["NeutrinoCrypto", "NeutrinoCore"],
+            resources: [.copy("Fixtures")]
+        ),
         .testTarget(name: "NeutrinoUITests",     dependencies: ["NeutrinoUI"]),
         .testTarget(name: "NeutrinoOOXMLTests",  dependencies: ["NeutrinoOOXML"]),
     ]
