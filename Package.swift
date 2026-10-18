@@ -12,8 +12,12 @@ import PackageDescription
 //   NeutrinoCrypto  + libsodium. The identity keypair and everything sealed to it.
 //   NeutrinoUI      + SwiftUI. Login, register, key import, lock screen.
 //   NeutrinoOOXML   Foundation + Compression. Zip and XML plumbing, and the `.docx` reader.
+//   NeutrinoPrint   UIKit + SwiftUI. Paginating, dressing and printing a document.
 //
 // NeutrinoOOXML deliberately depends on nothing else here: it is a file format, not a client.
+// NeutrinoPrint likewise: printing needs no account and no keys, so it stays out of NeutrinoUI's
+// crypto footprint. Each app turns its own document into a `PrintJob`; the pages, header, page
+// numbers and print dialog are the same everywhere.
 //
 // What earns its place in it is the plumbing every OOXML format needs — `Zip/` and `XML/` — which
 // is what Sheets links it for and what Slides will link it for. A single app's format mapping does
@@ -29,6 +33,7 @@ let package = Package(
         .library(name: "NeutrinoCrypto", targets: ["NeutrinoCrypto"]),
         .library(name: "NeutrinoUI",     targets: ["NeutrinoUI"]),
         .library(name: "NeutrinoOOXML",  targets: ["NeutrinoOOXML"]),
+        .library(name: "NeutrinoPrint",  targets: ["NeutrinoPrint"]),
     ],
     dependencies: [
         .package(url: "https://github.com/jedisct1/swift-sodium", from: "0.9.1"),
@@ -46,6 +51,7 @@ let package = Package(
         ),
         .target(name: "NeutrinoUI", dependencies: ["NeutrinoCore", "NeutrinoAuth", "NeutrinoCrypto"]),
         .target(name: "NeutrinoOOXML"),
+        .target(name: "NeutrinoPrint"),
 
         .testTarget(name: "NeutrinoCoreTests",   dependencies: ["NeutrinoCore"]),
         .testTarget(name: "NeutrinoAuthTests",   dependencies: ["NeutrinoAuth", "NeutrinoCore"]),
@@ -56,5 +62,6 @@ let package = Package(
         ),
         .testTarget(name: "NeutrinoUITests",     dependencies: ["NeutrinoUI"]),
         .testTarget(name: "NeutrinoOOXMLTests",  dependencies: ["NeutrinoOOXML"]),
+        .testTarget(name: "NeutrinoPrintTests",  dependencies: ["NeutrinoPrint"]),
     ]
 )
