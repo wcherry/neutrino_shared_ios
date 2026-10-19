@@ -65,15 +65,20 @@ public final class PrintCoordinator: ObservableObject {
 
 /// The "Print…" command, spelled once so it reads the same in every app's menu.
 ///
-/// Disabled while a job is being prepared, and hidden entirely on a device that cannot print.
+/// Disabled while a job is being prepared, and hidden entirely on a device that cannot print. A
+/// second command for printing part of a document — Sheets' "Print Selection…" — passes its own
+/// `title` and keeps the icon.
 public struct PrintMenuButton: View {
 
     @ObservedObject private var coordinator: PrintCoordinator
+    private let title: LocalizedStringKey
     private let makeJob: @MainActor () async throws -> PrintJob
 
     public init(_ coordinator: PrintCoordinator,
+                title: LocalizedStringKey = "Print\u{2026}",
                 makeJob: @escaping @MainActor () async throws -> PrintJob) {
         self.coordinator = coordinator
+        self.title = title
         self.makeJob = makeJob
     }
 
@@ -82,7 +87,7 @@ public struct PrintMenuButton: View {
             Button {
                 coordinator.print(makeJob)
             } label: {
-                Label("Print…", systemImage: "printer")
+                Label(title, systemImage: "printer")
             }
             .disabled(coordinator.isPreparing)
         }

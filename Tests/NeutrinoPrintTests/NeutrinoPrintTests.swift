@@ -153,17 +153,31 @@ final class NeutrinoPrintTests: XCTestCase {
 
     // MARK: - Printer
 
+    /// The controller is a singleton, so each job has to clear what the last one left on it.
+    ///
+    /// Asserted through the renderer rather than `printingItem`: outside a host app the controller
+    /// declines to hold a printing item at all, so reading one back proves nothing.
     @MainActor
     func testConfigureClearsThePreviousJob() {
         let controller = UIPrintInteractionController.shared
-        NeutrinoPrinter.configure(controller, for: PrintJob(name: "pdf", content: .pdf(Data())))
-        XCTAssertNotNil(controller.printingItem)
+        let pdf = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 100, height: 100))
+            .pdfData { $0.beginPage() }
 
         NeutrinoPrinter.configure(controller,
                                   for: PrintJob(name: "Text", content: .attributedText(paragraphs(1))))
-        XCTAssertNil(controller.printingItem)
         XCTAssertTrue(controller.printPageRenderer is NeutrinoPrintPageRenderer)
         XCTAssertEqual(controller.printInfo?.jobName, "Text")
+
+        NeutrinoPrinter.configure(controller, for: PrintJob(name: "pdf", content: .pdf(pdf)))
+        XCTAssertNil(controller.printPageRenderer, "a PDF job must not print the previous renderer")
+        XCTAssertEqual(controller.printInfo?.jobName, "pdf")
+
+        NeutrinoPrinter.configure(controller,
+                                  for: PrintJob(name: "Again", content: .markup("<p>Hi</p>"),
+                                                orientation: .landscape))
+        XCTAssertNil(controller.printingItem)
+        XCTAssertTrue(controller.printPageRenderer is NeutrinoPrintPageRenderer)
+        XCTAssertEqual(controller.printInfo?.orientation, .landscape)
     }
 }
 
