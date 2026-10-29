@@ -1,3 +1,7 @@
+// iOS-only for now: this target is UIKit/SwiftUI-for-iOS and is compiled out on macOS, where
+// only NeutrinoCore, NeutrinoAuth, NeutrinoCrypto and NeutrinoOOXML are built. See Package.swift.
+#if os(iOS)
+
 import SwiftUI
 import VisionKit
 import NeutrinoCore
@@ -307,3 +311,5 @@ private enum ImportStep {
     case success(keyVersion: String, note: String?)
     case error(message: String)
 }
+
+#endif

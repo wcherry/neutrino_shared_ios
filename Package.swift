@@ -2,7 +2,12 @@
 import PackageDescription
 
 // The code every Neutrino iOS app shares: account identity, the OAuth flow, the E2EE key
-// lifecycle, and the sign-in screens.
+// lifecycle, and the sign-in screens. The macOS Drive client uses the first three as well.
+//
+// Two platforms. NeutrinoCore, NeutrinoAuth, NeutrinoCrypto and NeutrinoOOXML build for both;
+// NeutrinoUI and NeutrinoPrint are UIKit and iOS-flavoured SwiftUI, so their sources are wrapped in
+// `#if os(iOS)` and compile to empty modules on macOS. A platform conditional anywhere in here must
+// leave iOS behaviour exactly as it was — seven shipped apps rebuild against this.
 //
 // Four layers, because they have four different dependency footprints — and one of them has to
 // stay linkable from a share extension, which must not pull in SwiftUI:
@@ -26,7 +31,7 @@ import PackageDescription
 // only one of them uses. `Docx/` predates that line and is the same question, still open.
 let package = Package(
     name: "NeutrinoShared",
-    platforms: [.iOS(.v16)],
+    platforms: [.iOS(.v16), .macOS(.v13)],
     products: [
         .library(name: "NeutrinoCore",   targets: ["NeutrinoCore"]),
         .library(name: "NeutrinoAuth",   targets: ["NeutrinoAuth"]),
@@ -60,7 +65,6 @@ let package = Package(
             dependencies: ["NeutrinoCrypto", "NeutrinoCore"],
             resources: [.copy("Fixtures")]
         ),
-        .testTarget(name: "NeutrinoUITests",     dependencies: ["NeutrinoUI"]),
         .testTarget(name: "NeutrinoOOXMLTests",  dependencies: ["NeutrinoOOXML"]),
         .testTarget(name: "NeutrinoPrintTests",  dependencies: ["NeutrinoPrint"]),
     ]

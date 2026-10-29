@@ -1,3 +1,7 @@
+// iOS-only for now: this target is UIKit/SwiftUI-for-iOS and is compiled out on macOS, where
+// only NeutrinoCore, NeutrinoAuth, NeutrinoCrypto and NeutrinoOOXML are built. See Package.swift.
+#if os(iOS)
+
 import SwiftUI
 import NeutrinoCore
 
@@ -147,3 +151,5 @@ extension View {
         }
     }
 }
+
+#endif
