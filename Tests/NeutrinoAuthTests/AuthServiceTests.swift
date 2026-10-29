@@ -338,6 +338,73 @@ final class AuthServiceTests: XCTestCase {
         XCTAssertEqual(MockURLProtocol.requestCount, 0)
     }
 
+    /// The explicit refresh throws and leaves the decision to the caller. The macOS app and its
+    /// sync agent share one session, and a rejected refresh token there usually means the other
+    /// process just rotated it — signing out from here would end a session that is alive.
+    func testExplicitRefreshThrowsOnRejectionWithoutSigningOut() async {
+        KeychainService.save("at", forKey: "nd.access_token")
+        KeychainService.save("rt", forKey: "nd.refresh_token")
+        MockURLProtocol.handler = { request in (Self.response(request, 401), Data()) }
+        let sut = makeSUT()
+
+        do {
+            try await sut.refreshAccessToken()
+            XCTFail("a rejected refresh token must throw")
+        } catch {
+            XCTAssertEqual(error as? AuthError, .invalidCredentials)
+        }
+        XCTAssertTrue(sut.isAuthenticated)
+        XCTAssertEqual(KeychainService.load(forKey: "nd.access_token"), "at")
+    }
+
+    /// Unconditional: a token still in date is refreshed anyway, because the caller has been told
+    /// by the server that it is not good.
+    func testExplicitRefreshIgnoresTheExpiryAndPersistsTheNewSession() async throws {
+        KeychainService.save("at", forKey: "nd.access_token")
+        KeychainService.save("rt", forKey: "nd.refresh_token")
+        let future = Date().addingTimeInterval(3600)
+        KeychainService.save(ISO8601DateFormatter().string(from: future), forKey: "nd.token_expiry")
+        MockURLProtocol.handler = { request in
+            (Self.response(request, 200), Data(#"""
+                {"access_token":"at2","refresh_token":"rt2","expires_in":600,"token_type":"Bearer"}
+            """#.utf8))
+        }
+        let sut = makeSUT()
+
+        try await sut.refreshAccessToken()
+
+        XCTAssertEqual(MockURLProtocol.requestCount, 1)
+        XCTAssertEqual(sut.accessToken(), "at2")
+        XCTAssertEqual(KeychainService.load(forKey: "nd.refresh_token"), "rt2")
+        let expiry = try XCTUnwrap(sut.tokenExpiry)
+        XCTAssertEqual(expiry.timeIntervalSinceNow, 600, accuracy: 5)
+    }
+
+    func testExplicitRefreshWithNoRefreshTokenThrows() async {
+        let sut = makeSUT()
+        do {
+            try await sut.refreshAccessToken()
+            XCTFail("no refresh token must throw")
+        } catch {
+            XCTAssertEqual(error as? AuthError, .invalidCredentials)
+        }
+        XCTAssertEqual(MockURLProtocol.requestCount, 0)
+    }
+
+    /// Another process signing in or out is picked up on request, not only at launch.
+    func testReloadSessionFollowsTheKeychain() {
+        let sut = makeSUT()
+        XCTAssertFalse(sut.isAuthenticated)
+
+        KeychainService.save("at", forKey: "nd.access_token")
+        sut.reloadSession()
+        XCTAssertTrue(sut.isAuthenticated)
+
+        KeychainService.delete(forKey: "nd.access_token")
+        sut.reloadSession()
+        XCTAssertFalse(sut.isAuthenticated)
+    }
+
     // MARK: - PKCE
 
     func testPKCEChallengeIsTheSHA256OfTheVerifier() {
@@ -356,5 +423,34 @@ final class AuthServiceTests: XCTestCase {
     func testRandomValuesDoNotRepeat() {
         let values = (0..<32).map { _ in AuthService.randomBase64URL(byteCount: 16) }
         XCTAssertEqual(Set(values).count, values.count)
+    }
+}
+
+// MARK: - AccessTokenTests
+
+final class AccessTokenTests: XCTestCase {
+
+    /// Builds a JWT-shaped string. Only the payload segment is ever read.
+    private func makeToken(payload: [String: Any], segments: Int = 3) -> String {
+        let json = try! JSONSerialization.data(withJSONObject: payload)
+        return (["header", json.base64URLEncodedString] + Array(repeating: "sig", count: segments - 2))
+            .joined(separator: ".")
+    }
+
+    func testReadsTheSubClaim() {
+        XCTAssertEqual(AccessToken.userID(from: makeToken(payload: ["sub": "user-42", "exp": 1])), "user-42")
+    }
+
+    /// A JWT payload is unpadded base64url; this one needs both `-`/`_` and padding restored.
+    func testDecodesUnpaddedBase64URLPayloads() {
+        let token = makeToken(payload: ["sub": "a>b?c~"])
+        XCTAssertEqual(AccessToken.userID(from: token), "a>b?c~")
+    }
+
+    func testAnswersNilForAnythingElse() {
+        XCTAssertNil(AccessToken.userID(from: nil))
+        XCTAssertNil(AccessToken.userID(from: "not-a-jwt"))
+        XCTAssertNil(AccessToken.userID(from: makeToken(payload: ["name": "no sub"])))
+        XCTAssertNil(AccessToken.userID(from: "header.%%%.sig"))
     }
 }

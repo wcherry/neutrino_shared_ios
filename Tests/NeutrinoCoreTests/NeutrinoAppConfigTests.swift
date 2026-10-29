@@ -133,4 +133,37 @@ final class NeutrinoAppConfigTests: XCTestCase {
             XCTAssertNil(config.appGroupIdentifier, "\(config.slug) unexpectedly declares an App Group")
         }
     }
+
+    // MARK: - macOS
+
+    /// The Mac client's keys are the iOS Drive app's: `NeutrinoDriveDesktop`'s upgrade migration
+    /// writes the session it held under its own names into exactly these, and the sync agent reads
+    /// them back. A drift here signs every upgrading Mac out.
+    func testMacDriveUsesTheDriveNamespaceAndTheDesktopClient() {
+        let mac = NeutrinoAppConfig.macDrive
+        XCTAssertEqual(mac.keychainPrefix, "nd")
+        XCTAssertEqual(mac.oauthClientID, "neutrino-desktop")
+        XCTAssertEqual(mac.accessTokenKey, "nd.access_token")
+        XCTAssertEqual(mac.refreshTokenKey, "nd.refresh_token")
+        XCTAssertEqual(mac.tokenExpiryKey, "nd.token_expiry")
+        XCTAssertEqual(mac.keyringKey, "nd.encryption.keyring")
+    }
+
+    /// The groups the app, the sync agent and the File Provider extension are signed into
+    /// (`neutrino_drive.entitlements`). The keychain group is bare: `KeychainService` prefixes the
+    /// team id at runtime, and the result must be exactly the entitlement's
+    /// `46KWJJ63FU.com.neutrino.drive`.
+    func testMacDriveDeclaresTheGroupsItsBinariesAreSignedInto() {
+        let mac = NeutrinoAppConfig.macDrive
+        XCTAssertEqual(mac.appGroupIdentifier, "46KWJJ63FU.com.neutrino.drive")
+        XCTAssertEqual(mac.keychainAccessGroup, "com.neutrino.drive")
+        XCTAssertNil(mac.sharedKeychainAccessGroup)
+    }
+
+    /// The Mac keeps the "nd" prefix iOS Drive has, which the iOS collision test would reject —
+    /// correctly, for co-installed iOS apps. It stays out of `allApps` for that reason.
+    func testDesktopAppsAreNotInTheIOSCollisionSet() {
+        XCTAssertFalse(NeutrinoAppConfig.allApps.map(\.slug).contains(NeutrinoAppConfig.macDrive.slug))
+        XCTAssertEqual(NeutrinoAppConfig.desktopApps.map(\.slug), ["drive-macos"])
+    }
 }

@@ -1,3 +1,7 @@
+// iOS-only for now: this target is UIKit/SwiftUI-for-iOS and is compiled out on macOS, where
+// only NeutrinoCore, NeutrinoAuth, NeutrinoCrypto and NeutrinoOOXML are built. See Package.swift.
+#if os(iOS)
+
 import UIKit
 
 // MARK: - AttributedTextPageSource
@@ -125,3 +129,5 @@ public final class AttributedTextPageSource: PrintPageSource {
         } while laidOut < glyphCount
     }
 }
+
+#endif

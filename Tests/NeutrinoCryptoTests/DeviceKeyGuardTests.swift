@@ -24,6 +24,10 @@ private func open(_ sealed: String, with key: KeyBundle) throws -> Bytes {
 }
 
 /// An in-memory server: a key directory, a file listing and the caller's key refs.
+/// `DeviceKeyRepairService` calls this from `concurrency` tasks at once, so every method that
+/// touches the dictionaries takes `lock` — unguarded, two workers writing `writes` together is a
+/// crash in `Dictionary.setValue` roughly one run in two. Tests set the stored properties up front,
+/// before any task is running, and read them after the run is awaited.
 private class FakeTransport: DeviceKeyTransport {
     var published: PublishedKey?
     var refs: [String: (sealed: String, keyVersion: Int)] = [:]
@@ -33,29 +37,39 @@ private class FakeTransport: DeviceKeyTransport {
     /// How many times `fileKey` fails with a retryable error before answering.
     var transientFailures: [String: Int] = [:]
 
+    private let lock = NSLock()
+
     struct Transient: Error {}
 
     func publishedKey() async throws -> PublishedKey? {
-        directoryReads += 1
-        return published
+        lock.withLock {
+            directoryReads += 1
+            return published
+        }
     }
 
     func fileIDsPage(limit: Int, offset: Int) async throws -> [String] {
-        guard offset < fileIDs.count else { return [] }
-        return Array(fileIDs[offset..<min(offset + limit, fileIDs.count)])
+        lock.withLock {
+            guard offset < fileIDs.count else { return [] }
+            return Array(fileIDs[offset..<min(offset + limit, fileIDs.count)])
+        }
     }
 
     func fileKey(fileID: String) async throws -> (sealed: String, keyVersion: Int)? {
-        if let remaining = transientFailures[fileID], remaining > 0 {
-            transientFailures[fileID] = remaining - 1
-            throw Transient()
+        try lock.withLock {
+            if let remaining = transientFailures[fileID], remaining > 0 {
+                transientFailures[fileID] = remaining - 1
+                throw Transient()
+            }
+            return refs[fileID]
         }
-        return refs[fileID]
     }
 
     func setFileKey(fileID: String, sealed: String, keyVersion: Int) async throws {
-        writes[fileID] = (sealed, keyVersion)
-        refs[fileID] = (sealed, keyVersion)
+        lock.withLock {
+            writes[fileID] = (sealed, keyVersion)
+            refs[fileID] = (sealed, keyVersion)
+        }
     }
 
     func isRetryable(_ error: Error) -> Bool { error is Transient }

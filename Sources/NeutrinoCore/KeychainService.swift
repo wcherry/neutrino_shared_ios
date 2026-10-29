@@ -158,14 +158,14 @@ public enum KeychainService {
         attributes[kSecReturnAttributes] = true
 
         var result: AnyObject?
-        var status = SecItemAdd(attributes as CFDictionary, &result)
+        var status = secItemAdd(attributes, &result)
         if status == errSecDuplicateItem {
             var read = identify
             read[kSecReturnAttributes] = true
             read[kSecMatchLimit] = kSecMatchLimitOne
-            status = SecItemCopyMatching(read as CFDictionary, &result)
+            status = secItemCopyMatching(read, &result)
         }
-        SecItemDelete(identify as CFDictionary)
+        secItemDelete(identify)
 
         guard status == errSecSuccess,
               let group = (result as? [CFString: Any])?[kSecAttrAccessGroup] as? String,
@@ -186,14 +186,14 @@ public enum KeychainService {
             kSecAttrAccount: "app.getneutrino.keychain.group-probe",
             kSecAttrAccessGroup: group
         ]
-        SecItemDelete(identify as CFDictionary)
+        secItemDelete(identify)
 
         var add = identify
         add[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         add[kSecValueData] = Data([0])
 
-        guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else { return false }
-        SecItemDelete(identify as CFDictionary)
+        guard secItemAdd(add, nil) == errSecSuccess else { return false }
+        secItemDelete(identify)
         return true
     }
 
@@ -319,9 +319,9 @@ public enum KeychainService {
                 kSecClass: kSecClassGenericPassword,
                 kSecAttrAccount: key
             ]
-            SecItemDelete(deleteQuery as CFDictionary)
+            secItemDelete(deleteQuery)
             deleteQuery[kSecAttrAccessGroup] = group
-            SecItemDelete(deleteQuery as CFDictionary)
+            secItemDelete(deleteQuery)
 
             let status = addItem(data, forKey: key, group: group, accessible: accessible)
             if status == errSecSuccess { return true }
@@ -348,7 +348,7 @@ public enum KeychainService {
                 kSecAttrAccount: key,
                 kSecAttrAccessGroup: group
             ]
-            SecItemDelete(deleteQuery as CFDictionary)
+            secItemDelete(deleteQuery)
 
             let status = addItem(data,
                                  forKey: key,
@@ -373,7 +373,7 @@ public enum KeychainService {
             kSecValueData: data
         ]
         if let service { query[kSecAttrService] = service }
-        return SecItemAdd(query as CFDictionary, nil)
+        return secItemAdd(query, nil)
     }
 
     /// Test backends are a flat dictionary with no notion of a group, so the scope has to travel
@@ -393,7 +393,7 @@ public enum KeychainService {
             kSecValueData: data
         ]
 
-        let addStatus = SecItemAdd(query as CFDictionary, nil)
+        let addStatus = secItemAdd(query, nil)
         if addStatus == errSecSuccess { return true }
 
         if addStatus == errSecDuplicateItem {
@@ -407,8 +407,7 @@ public enum KeychainService {
                 kSecAttrAccessible: accessible,
                 kSecValueData: data
             ]
-            return SecItemUpdate(searchQuery as CFDictionary,
-                                 updateAttributes as CFDictionary) == errSecSuccess
+            return secItemUpdate(searchQuery, updateAttributes) == errSecSuccess
         }
 
         return false
@@ -436,8 +435,17 @@ public enum KeychainService {
         }
 
         var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data else { return nil }
+        let status = secItemCopyMatching(query, &result)
+        guard status == errSecSuccess, let data = result as? Data else {
+            #if os(macOS)
+            // A process that once ran without the data-protection keychain left its items in the
+            // legacy one. Carry them across rather than reporting a signed-in user as signed out.
+            if status == errSecItemNotFound, case .app = scope {
+                return migrateLegacyItem(forKey: key)
+            }
+            #endif
+            return nil
+        }
         return String(data: data, encoding: .utf8)
     }
 
@@ -459,7 +467,7 @@ public enum KeychainService {
         ]
 
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+        guard secItemCopyMatching(query, &result) == errSecSuccess,
               let items = result as? [[CFString: Any]] else { return [] }
         return items.compactMap { $0[kSecAttrAccount] as? String }
     }
@@ -485,7 +493,7 @@ public enum KeychainService {
         }
 
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+        guard secItemCopyMatching(query, &result) == errSecSuccess,
               let attributes = result as? [CFString: Any] else { return nil }
         return attributes[kSecAttrAccessible] as? String
     }
@@ -510,7 +518,7 @@ public enum KeychainService {
                 kSecAttrAccount: key,
                 kSecAttrAccessGroup: group
             ]
-            return SecItemDelete(query as CFDictionary) == errSecSuccess
+            return secItemDelete(query) == errSecSuccess
         }
 
         var query: [CFString: Any] = [
@@ -518,15 +526,19 @@ public enum KeychainService {
             kSecAttrAccount: key
         ]
 
-        let status = SecItemDelete(query as CFDictionary)
+        let status = secItemDelete(query)
 
         // An unqualified delete does not always reach items in a non-default group, so make a
         // second explicit pass when one is in effect.
         var deletedFromGroup = false
         if let group = accessGroup {
             query[kSecAttrAccessGroup] = group
-            deletedFromGroup = SecItemDelete(query as CFDictionary) == errSecSuccess
+            deletedFromGroup = secItemDelete(query) == errSecSuccess
         }
+
+        #if os(macOS)
+        deleteLegacyItem(forKey: key)
+        #endif
 
         return status == errSecSuccess || deletedFromGroup
     }

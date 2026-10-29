@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 import NeutrinoCore
 
 // MARK: - DeviceIdentity
@@ -19,13 +21,24 @@ public enum DeviceIdentity {
     ///
     /// A user-set override wins; otherwise the device's own name is used. The app's display name
     /// is appended so the sessions list can tell the five apps apart, which all report an
-    /// identical `UIDevice.name` on the same hardware.
+    /// identical hardware name on the same device.
     public static var deviceName: String {
         if let custom = UserDefaults.standard.string(forKey: NeutrinoApp.current.deviceNameKey),
            !custom.trimmingCharacters(in: .whitespaces).isEmpty {
             return custom
         }
-        return "\(UIDevice.current.name) — \(NeutrinoApp.current.displayName)"
+        return "\(hardwareName) — \(NeutrinoApp.current.displayName)"
+    }
+
+    /// What the device calls itself: `UIDevice.name` on iOS, the Sharing pane's computer name on
+    /// macOS. `Host.localizedName` is that same user-facing name ("Will's MacBook Pro"), not the
+    /// network hostname, which is what a sessions list should show.
+    private static var hardwareName: String {
+        #if canImport(UIKit)
+        return UIDevice.current.name
+        #else
+        return Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+        #endif
     }
 
     /// Overrides the registered device name. Passing nil (or blank) restores the default.
