@@ -275,18 +275,13 @@ public final class AuthService: ObservableObject {
             return
         }
 
-        guard let refreshToken = KeychainService.load(forKey: config.refreshTokenKey) else {
+        guard KeychainService.load(forKey: config.refreshTokenKey) != nil else {
             logout()
             return
         }
 
         do {
-            let response = try await postToken(formFields: [
-                "grant_type":    "refresh_token",
-                "refresh_token": refreshToken,
-                "client_id":     config.oauthClientID,
-            ])
-            persist(response)
+            try await refreshAccessToken()
             logger.debug("token refreshed")
         } catch AuthError.invalidCredentials {
             // The refresh token itself was rejected — the session is over, not merely stale.
@@ -297,6 +292,45 @@ public final class AuthService: ObservableObject {
             // server is not a reason to sign somebody out of an offline-first app.
             logger.error("refresh failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Exchanges the stored refresh token for a new session, unconditionally.
+    ///
+    /// The primitive under `refreshTokenIfNeeded`, for a caller that already knows the token is
+    /// bad — a request just came back 401 — or that refreshes on its own schedule. Unlike that
+    /// method it never signs anyone out: it throws, and the caller decides. That matters to a
+    /// client whose session is shared by two processes (the macOS app and its sync agent), where a
+    /// rejected refresh token usually means the *other* process just rotated it, not that the
+    /// session is over.
+    ///
+    /// - Throws: `AuthError.invalidCredentials` when there is no refresh token or the server
+    ///   rejected it; any other `AuthError` for a request that never got an answer.
+    public func refreshAccessToken() async throws {
+        guard let refreshToken = KeychainService.load(forKey: config.refreshTokenKey) else {
+            throw AuthError.invalidCredentials
+        }
+        let response = try await postToken(formFields: [
+            "grant_type":    "refresh_token",
+            "refresh_token": refreshToken,
+            "client_id":     config.oauthClientID,
+        ])
+        persist(response)
+    }
+
+    /// When the stored access token expires, or nil when there is none.
+    public var tokenExpiry: Date? {
+        KeychainService.load(forKey: config.tokenExpiryKey)
+            .flatMap { ISO8601DateFormatter().date(from: $0) }
+    }
+
+    /// Re-reads `isAuthenticated` from the Keychain.
+    ///
+    /// The published flag is otherwise set only by this instance's own sign-in and sign-out. A
+    /// process that shares the session with another — an extension, the macOS sync agent — calls
+    /// this when it has reason to think the other one signed in or out since.
+    public func reloadSession() {
+        let stored = accessToken() != nil
+        if isAuthenticated != stored { isAuthenticated = stored }
     }
 
     /// Loads the signed-in account from `GET /api/v1/auth/me` and publishes it as `profile`.

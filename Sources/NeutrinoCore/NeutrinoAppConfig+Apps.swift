@@ -3,7 +3,7 @@ import Security
 
 // MARK: - The apps
 
-/// The shipped configuration for each Neutrino iOS app.
+/// The shipped configuration for each Neutrino iOS and macOS app.
 ///
 /// These live in the package rather than in each app so adoption is one line — `NeutrinoApp
 /// .configure(.drive)` — and, more importantly, so the namespacing contract is checkable. Six
@@ -132,4 +132,41 @@ public extension NeutrinoAppConfig {
     static let allApps: [NeutrinoAppConfig] = [
         .drive, .docs, .sheets, .notes, .photos, .slides, .calendar,
     ]
+
+    // MARK: - macOS
+
+    /// Neutrino Drive for macOS (`neutrino_drive_mac_desktop`): the menu-bar app, its `launchd`
+    /// sync agent and its File Provider extension.
+    ///
+    /// Shares `"nd"` with iOS Drive on purpose — it is the same product, and the prefix only has to
+    /// keep apart apps that can share one keychain. These two never do: each platform's keychain
+    /// is its own, and the iOS app running on Apple silicon gets its own group. Which is why this is
+    /// not in `allApps`, whose collision test is about co-installed iOS apps.
+    ///
+    /// `neutrino-desktop` is shared with the Windows client and is seeded by
+    /// `neutrino/migrations/00095_oauth__*`.
+    ///
+    /// The groups are what the three binaries are signed into (`neutrino_drive.entitlements`). On
+    /// macOS the App Group id carries the team prefix itself; the keychain group is bare, like every
+    /// other, and `KeychainService` adds the prefix at runtime. There is no cross-app identity group
+    /// yet — no other Neutrino Mac app exists to share it with — so the keyring is a private item
+    /// the app and the sync agent reach through the Drive group.
+    ///
+    /// The sign-in screen is the app's own and offers neither registration nor a 2FA code field.
+    static let macDrive = NeutrinoAppConfig(
+        slug: "drive-macos",
+        displayName: "Neutrino Drive",
+        contentNoun: "files",
+        keychainPrefix: "nd",
+        oauthClientID: "neutrino-desktop",
+        defaultHost: "https://www.getneutrino.app",
+        appGroupIdentifier: "46KWJJ63FU.com.neutrino.drive",
+        keychainAccessGroup: "com.neutrino.drive",
+        sharedKeychainAccessGroup: nil,
+        supportsRegistration: false,
+        supportsTwoFactor: false
+    )
+
+    /// Every shipped macOS app.
+    static let desktopApps: [NeutrinoAppConfig] = [.macDrive]
 }

@@ -16,9 +16,15 @@ public enum AccessToken {
     /// a Drive listing addresses the root without calling `/api/v1/auth/me` first. Notes uses it to
     /// name the per-user keyring it stores.
     public static func currentUserID() -> String? {
-        guard let token = KeychainService.load(forKey: NeutrinoApp.current.accessTokenKey) else {
-            return nil
-        }
+        userID(from: KeychainService.load(forKey: NeutrinoApp.current.accessTokenKey))
+    }
+
+    /// The `sub` claim of a token the caller already holds.
+    ///
+    /// For an API client handed its token rather than reading the Keychain itself — the macOS sync
+    /// engine addresses the drive root this way, with whichever token it was last given.
+    public static func userID(from token: String?) -> String? {
+        guard let token else { return nil }
         let segments = token.split(separator: ".")
         guard segments.count > 1 else { return nil }
 
