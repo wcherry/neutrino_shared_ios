@@ -3,8 +3,9 @@ import Sodium
 
 // MARK: - Pairing
 //
-// Receiving the keyring from a device that already has it, offline, in two QR codes. This device is
-// always the **receiver**; the web client is the sender.
+// Handing the keyring between two devices, offline, in two QR codes. Both halves live here: a phone
+// is usually the **receiver** and the web client or the macOS client the **sender** — a Mac has the
+// large screen to display QR-B and the camera to read QR-A. Each app uses the half it needs.
 //
 //   1. receiver  generates an ephemeral X25519 keypair, shows QR-A
 //                = { ephemeral public key, session nonce }
@@ -15,7 +16,7 @@ import Sodium
 // This replaces the old PIN-protected QR, which put the whole keypair behind a few digits — anyone
 // who photographed that code held the identity after a few seconds on a GPU. Here, photographing
 // either code yields nothing: QR-A is a public key, and QR-B can only be opened by the ephemeral
-// secret half, which never leaves this device.
+// secret half, which never leaves the receiver.
 //
 // Step 4 is what a passive photograph cannot defeat but an *active* relay could — someone
 // substituting their own ephemeral key in QR-A and re-sealing to the real receiver would sit
@@ -29,7 +30,7 @@ import Sodium
 
 // MARK: - Wire types
 
-/// QR-A — what this device displays.
+/// QR-A — what the receiver displays and the sender scans.
 public struct PairingOffer: Codable, Sendable {
     public let t: String
     public let v: Int
@@ -73,6 +74,11 @@ public enum PairingError: LocalizedError, Equatable {
     case notAPairingCode
     case differentAttempt
     case couldNotOpen
+    /// The sender scanned a QR-A whose public key is not a key.
+    case damagedOffer
+    /// The sender holds no keyring to hand over.
+    case noKeyring
+    case sealFailed
 
     public var errorDescription: String? {
         switch self {
@@ -82,6 +88,12 @@ public enum PairingError: LocalizedError, Equatable {
             return "This code is from a different pairing attempt — start again."
         case .couldNotOpen:
             return "Could not read the pairing code — it may be damaged."
+        case .damagedOffer:
+            return "This pairing code is damaged."
+        case .noKeyring:
+            return "This device has no encryption key to send."
+        case .sealFailed:
+            return "Could not build the pairing reply."
         }
     }
 }
@@ -115,6 +127,7 @@ public enum Pairing {
     private static let sodium = Sodium()
     private static let nonceBytes = 16
     private static let sasDigits = 6
+    private static let publicKeyBytes = 32
 
     // MARK: Step 1 — the offer
 
@@ -136,6 +149,49 @@ public enum Pairing {
     /// The JSON payload to render as QR-A.
     public static func encode(_ offer: PairingOffer) throws -> String {
         String(data: try JSONEncoder().encode(offer), encoding: .utf8) ?? ""
+    }
+
+    // MARK: Step 2 — the sender's reply
+
+    /// Parse a scanned QR-A.
+    ///
+    /// The public key's length is checked here rather than at seal time so a mis-scanned code is
+    /// reported as a bad code, not as an unexplained failure to encrypt.
+    public static func parseOffer(_ raw: String) throws -> PairingOffer {
+        guard let data = raw.trimmingCharacters(in: .whitespacesAndNewlines).data(using: .utf8),
+              let parsed = try? JSONDecoder().decode(PairingOffer.self, from: data),
+              parsed.t == PairingOffer.type,
+              parsed.v == 1
+        else {
+            throw PairingError.notAPairingCode
+        }
+        guard let pk = Base64URL.decode(parsed.pk), pk.count == publicKeyBytes else {
+            throw PairingError.damagedOffer
+        }
+        return parsed
+    }
+
+    /// Seal `keyring` to the offer's ephemeral key and build QR-B.
+    ///
+    /// A sealed box, so the ciphertext is openable only by the ephemeral secret half the receiver
+    /// kept. The nonce is echoed unchanged: it is what lets the receiver reject a QR-B left on
+    /// screen from an earlier attempt.
+    public static func respond(keyring: Keyring, offer: PairingOffer) throws -> PairingResponse {
+        guard let recipient = Base64URL.decode(offer.pk), recipient.count == publicKeyBytes else {
+            throw PairingError.damagedOffer
+        }
+        var plaintext = [UInt8](try KeyringCoder.encodeJSON(keyring))
+        defer { for i in plaintext.indices { plaintext[i] = 0 } }
+
+        guard let sealed = sodium.box.seal(message: plaintext, recipientPublicKey: recipient) else {
+            throw PairingError.sealFailed
+        }
+        return PairingResponse(t: PairingResponse.type, v: 1, ct: Base64URL.encode(sealed), n: offer.n)
+    }
+
+    /// The JSON payload to render as QR-B.
+    public static func encode(_ response: PairingResponse) throws -> String {
+        String(data: try JSONEncoder().encode(response), encoding: .utf8) ?? ""
     }
 
     // MARK: Step 3 — accepting the reply
