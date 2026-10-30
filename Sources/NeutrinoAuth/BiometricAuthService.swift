@@ -5,7 +5,9 @@ import NeutrinoCore
 
 // MARK: - BiometricAuthService
 
-/// Opt-in Face ID / Touch ID gate on app launch and on encryption-key access.
+/// Opt-in Face ID / Touch ID gate on app launch and on encryption-key access. On a Mac it's also
+/// the app lock, where `requiresBiometrics: false` lets a Mac without Touch ID lock with the
+/// login password.
 ///
 /// ## Policy
 ///
@@ -131,6 +133,10 @@ public final class BiometricAuthService: ObservableObject {
     private let unlockReason: String
     private let keyAccessReason: String
 
+    /// Whether enabling needs Face ID or Touch ID set up. `false` also allows a passcode or, on a
+    /// Mac, the login password alone; unlocking always accepts those anyway (see Policy).
+    private let requiresBiometrics: Bool
+
     /// When the app last went to `.background`. `nil` means "not backgrounded since launch".
     public private(set) var lastBackgroundedAt: Date?
 
@@ -146,10 +152,12 @@ public final class BiometricAuthService: ObservableObject {
                 evaluator: BiometricEvaluating = LAContextEvaluator(),
                 isFeatureEnabled: Bool = true,
                 unlockReason: String? = nil,
-                keyAccessReason: String = "Authenticate to access your encryption keys.") {
+                keyAccessReason: String = "Authenticate to access your encryption keys.",
+                requiresBiometrics: Bool = true) {
         self.defaults = defaults
         self.evaluator = evaluator
         self.isFeatureEnabled = isFeatureEnabled
+        self.requiresBiometrics = requiresBiometrics
         self.unlockReason = unlockReason ?? "Unlock \(NeutrinoApp.current.displayName) to continue."
         self.keyAccessReason = keyAccessReason
         self.logger = Logger(subsystem: NeutrinoApp.current.logSubsystem,
@@ -159,11 +167,19 @@ public final class BiometricAuthService: ObservableObject {
 
     // MARK: - Availability
 
+    /// With `requiresBiometrics: false`, `.available` can carry `LABiometryType.none`: a
+    /// passcode or password, no biometrics.
     public func availability() -> BiometricAvailability {
         guard isFeatureEnabled else { return .notAvailable }
         switch evaluator.canEvaluate(.deviceOwnerAuthenticationWithBiometrics) {
         case .success:
             return .available(evaluator.biometryType)
+        case .failure where !requiresBiometrics:
+            switch evaluator.canEvaluate(.deviceOwnerAuthentication) {
+            case .success:                                     return .available(.none)
+            case .failure(let error) where error.code == .passcodeNotSet: return .passcodeNotSet
+            case .failure:                                     return .notAvailable
+            }
         case .failure(let error):
             switch error.code {
             case .biometryNotEnrolled, .touchIDNotEnrolled: return .notEnrolled
@@ -202,6 +218,15 @@ public final class BiometricAuthService: ObservableObject {
         }
         isLocked = true
         lastError = nil
+    }
+
+    /// Locks now, whatever the grace period: a "Lock" command, or the Mac's screen locking or
+    /// going to sleep.
+    public func lock() {
+        guard isFeatureEnabled, isEnabled else { return }
+        isLocked = true
+        lastError = nil
+        lastBackgroundedAt = nil
     }
 
     /// `scenePhase == .inactive` — the moment iOS takes the app-switcher snapshot. Obscuring here
