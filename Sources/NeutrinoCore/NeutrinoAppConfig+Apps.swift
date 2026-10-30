@@ -167,6 +167,26 @@ public extension NeutrinoAppConfig {
         supportsTwoFactor: false
     )
 
+    /// Neutrino Atlas for macOS (`neutrino_atlas_mac_desktop`): the knowledge base, built on
+    /// `neutrino_atlaskit`. Its own prefix, `"natlas"`, and its own OAuth client, seeded by
+    /// `neutrino/migrations/00150_oauth__*` together with the iOS app's `neutrino-atlas-ios`.
+    ///
+    /// One binary with no extension or agent, so it needs neither an App Group nor a keychain
+    /// group: its items live in its default group, and nothing else has to read them. Like Drive
+    /// on the Mac it doesn't share an identity group yet, so the keyring is restored on this Mac
+    /// from the recovery kit or a key file.
+    static let macAtlas = NeutrinoAppConfig(
+        slug: "atlas-macos",
+        displayName: "Neutrino Atlas",
+        contentNoun: "pages",
+        keychainPrefix: "natlas",
+        oauthClientID: "neutrino-atlas-mac",
+        defaultHost: "https://www.getneutrino.app",
+        sharedKeychainAccessGroup: nil,
+        supportsRegistration: false,
+        supportsTwoFactor: true
+    )
+
     /// Every shipped macOS app.
-    static let desktopApps: [NeutrinoAppConfig] = [.macDrive]
+    static let desktopApps: [NeutrinoAppConfig] = [.macDrive, .macAtlas]
 }
