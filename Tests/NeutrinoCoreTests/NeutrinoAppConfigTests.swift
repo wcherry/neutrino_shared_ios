@@ -164,6 +164,26 @@ final class NeutrinoAppConfigTests: XCTestCase {
     /// correctly, for co-installed iOS apps. It stays out of `allApps` for that reason.
     func testDesktopAppsAreNotInTheIOSCollisionSet() {
         XCTAssertFalse(NeutrinoAppConfig.allApps.map(\.slug).contains(NeutrinoAppConfig.macDrive.slug))
-        XCTAssertEqual(NeutrinoAppConfig.desktopApps.map(\.slug), ["drive-macos"])
+        XCTAssertEqual(NeutrinoAppConfig.desktopApps.map(\.slug), ["drive-macos", "atlas-macos"])
+    }
+
+    /// Atlas has its own namespace and client. `neutrino-atlas-mac` must match the row
+    /// `neutrino/migrations/00150_oauth__*` seeds, or sign-in fails as an unknown client.
+    func testMacAtlasUsesItsOwnNamespaceAndClient() {
+        let atlas = NeutrinoAppConfig.macAtlas
+        XCTAssertEqual(atlas.keychainPrefix, "natlas")
+        XCTAssertEqual(atlas.oauthClientID, "neutrino-atlas-mac")
+        XCTAssertEqual(atlas.keyringKey, "natlas.encryption.keyring")
+        XCTAssertNil(atlas.appGroupIdentifier)
+        XCTAssertNil(atlas.keychainAccessGroup)
+        XCTAssertNil(atlas.sharedKeychainAccessGroup)
+    }
+
+    /// Two Mac apps can share one keychain, so their prefixes must differ, and no Mac app may take
+    /// a prefix an iOS app other than its own product uses.
+    func testMacAppPrefixesDontCollide() {
+        let mac = NeutrinoAppConfig.desktopApps.map(\.keychainPrefix)
+        XCTAssertEqual(Set(mac).count, mac.count)
+        XCTAssertFalse(NeutrinoAppConfig.allApps.map(\.keychainPrefix).contains("natlas"))
     }
 }
