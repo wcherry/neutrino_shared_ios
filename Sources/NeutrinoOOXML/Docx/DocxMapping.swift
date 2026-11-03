@@ -184,7 +184,7 @@ public enum DocxMapping {
     /// whole paragraph; an inline one replaces a run inside a paragraph that has other content.
     /// Getting it backwards puts a block node in an inline position, which the editor's schema then
     /// discards.
-    public static let blockPlaceholderKinds: Set<String> = ["sheetEmbed", "diagramEmbed"]
+    public static let blockPlaceholderKinds: Set<String> = ["sheetEmbed", "diagramEmbed", "drawingEmbed"]
 
     /// The character style every placeholder run carries.
     ///

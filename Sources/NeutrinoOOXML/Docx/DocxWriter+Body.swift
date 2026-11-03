@@ -147,7 +147,7 @@ extension DocxWriter {
                           + el("w:footnoteReference", [("w:id", String(number))]))
             case "docField":
                 out += fieldXML(node, context: context)
-            case "sheetEmbed", "diagramEmbed":
+            case "sheetEmbed", "diagramEmbed", "drawingEmbed":
                 out += embedXML(node, context: context)
             default:
                 // An inline node the mapping does not know. Its text still belongs in the document —
@@ -227,14 +227,16 @@ extension DocxWriter {
 
     /// An embed as the only thing OOXML can honestly carry: its title as text.
     ///
-    /// A sheet or diagram embed is a live view onto another Drive file. Word has no such concept —
+    /// A sheet, diagram or drawing embed is a live view onto another Drive file. Word has no such concept —
     /// an OLE object would be a dead snapshot pretending otherwise — so what goes into the document
     /// is a legible placeholder, and the embed's attributes ride in the extras where the reader
     /// picks them back up intact.
     static func embedXML(_ node: DocNode, context: WriteContext) -> String {
         context.extras.addPlaceholder(kind: node.type, attrs: node.attrs ?? [:])
-        let fallback = node.type == "sheetEmbed" ? "Embedded sheet" : "Embedded diagram"
-        let label = node.attr("title")?.stringValue ?? fallback
+        let fallback = ["sheetEmbed": "Embedded sheet", "diagramEmbed": "Embedded diagram",
+                        "drawingEmbed": "Embedded drawing"][node.type] ?? "Embedded content"
+        let title = node.attr("title")?.stringValue ?? ""
+        let label = title.isEmpty ? fallback : title
         return placeholderRunXML("[\(label)]")
     }
 
@@ -379,8 +381,8 @@ extension DocxWriter {
                 properties: paragraphPropertiesXML(node, style: DocxMapping.codeBlockStyleID),
                 content: runXML(RunStyle(), textEl(node.plainText)))]
 
-        case "sheetEmbed", "diagramEmbed":
-            // Both are block nodes in the editor's schema, so the placeholder gets a paragraph of
+        case "sheetEmbed", "diagramEmbed", "drawingEmbed":
+            // All three are block nodes in the editor's schema, so the placeholder gets a paragraph of
             // its own — the reader replaces that paragraph rather than its contents, which is what
             // keeps a block node out of an inline position on the way back.
             return [paragraphXML(properties: "", content: embedXML(node, context: context))]
