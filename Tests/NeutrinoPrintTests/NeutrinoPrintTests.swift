@@ -117,6 +117,23 @@ final class NeutrinoPrintTests: XCTestCase {
         XCTAssertTrue(text.contains("Page 1 of 1"), text)
     }
 
+    // MARK: - Preview
+
+    func testFirstPageJPEGIsPageOneScaledToThePreviewSize() throws {
+        let job = PrintJob(name: "Long", content: .attributedText(paragraphs(400)))
+        let jpeg = try XCTUnwrap(NeutrinoPrintPageRenderer(job: job).firstPageJPEG(maxEdge: 512))
+        XCTAssertEqual(Array(jpeg.prefix(3)), [0xFF, 0xD8, 0xFF])
+        let image = try XCTUnwrap(UIImage(data: jpeg))
+        // Letter is 612 x 792 points; its longer edge lands on 512 pixels.
+        XCTAssertEqual(image.size.height * image.scale, 512, accuracy: 1)
+        XCTAssertEqual(image.size.width * image.scale, 512 * 612 / 792, accuracy: 1)
+    }
+
+    func testAnEmptyDocumentStillHasAPreview() {
+        let job = PrintJob(name: "Empty", content: .attributedText(NSAttributedString()))
+        XCTAssertNotNil(NeutrinoPrintPageRenderer(job: job).firstPageJPEG())
+    }
+
     func testContentSitsInsideTheBandsAndMargins() {
         var drawnIn: CGRect?
         let job = PrintJob(name: "a", content: .pages(ProbeSource { drawnIn = $0 }))
