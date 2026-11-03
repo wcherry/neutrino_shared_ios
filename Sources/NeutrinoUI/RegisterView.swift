@@ -183,6 +183,12 @@ public struct RegisterView: View {
                 .foregroundStyle(Color(.tertiaryLabel))
                 .multilineTextAlignment(.center)
 
+            Text(LoginView.agreement(by: "creating an account"))
+                .font(.system(size: 12))
+                .foregroundStyle(Color(.tertiaryLabel))
+                .tint(brand.accent)
+                .multilineTextAlignment(.center)
+
             // The same account exists on whichever server the login screen is pointed at, so
             // sign-up honours that choice rather than quietly using the default.
             Text("Server: \(NeutrinoStorage.serverHost)")
