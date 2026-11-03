@@ -19,7 +19,8 @@ import UIKit
 /// ## Beyond the print dialog
 ///
 /// ``pdfData(paperSize:)`` runs the same pages into a PDF, which is what tests assert against and
-/// what an app's "Export as PDF" would share.
+/// what an app's "Export as PDF" would share. ``firstPageJPEG(paperSize:maxEdge:compressionQuality:)``
+/// runs page one into the picture Drive shows for the document.
 public final class NeutrinoPrintPageRenderer: UIPrintPageRenderer {
 
     public let job: PrintJob
@@ -170,6 +171,35 @@ public final class NeutrinoPrintPageRenderer: UIPrintPageRenderer {
                 drawPage(at: index, in: printableRect)
             }
         }
+    }
+
+    // MARK: - Preview
+
+    /// The first page as a JPEG no larger than `maxEdge` points on its longer side — the picture
+    /// Drive shows for the document.
+    ///
+    /// Drawn exactly as ``pdfData(paperSize:)`` draws it, header and page number included, so the
+    /// preview is the page the user would print. A job with no pages still comes back as a blank
+    /// sheet: an empty document is a white page, not a missing picture.
+    public func firstPageJPEG(paperSize: CGSize = NeutrinoPrintPageRenderer.letter,
+                              maxEdge: CGFloat = 512,
+                              compressionQuality: CGFloat = 0.82) -> Data? {
+        let paper = CGRect(origin: .zero, size: paperSize)
+        pdfPaper = (paper, paper.insetBy(dx: Self.pdfHardwareMargin, dy: Self.pdfHardwareMargin))
+        defer { pdfPaper = nil }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = true
+        format.scale = min(1, maxEdge / max(paperSize.width, paperSize.height))
+        let count = numberOfPages
+        let image = UIGraphicsImageRenderer(bounds: paper, format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(paper)
+            guard count > 0 else { return }
+            prepare(forDrawingPages: NSRange(location: 0, length: 1))
+            drawPage(at: 0, in: printableRect)
+        }
+        return image.jpegData(compressionQuality: compressionQuality)
     }
 }
 
