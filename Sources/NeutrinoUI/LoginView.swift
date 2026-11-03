@@ -205,14 +205,31 @@ public struct LoginView: View {
                     .disabled(authService.isLoggingIn)
             }
 
-            Text("By signing in you agree to our Terms of Service and Privacy Policy.")
+            Text(Self.agreement(by: "signing in"))
                 .font(.system(size: 12))
                 .foregroundStyle(Color(.tertiaryLabel))
+                .tint(brand.accent)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 8)
         }
         .padding(.horizontal, 32)
         .padding(.bottom, 48)
+    }
+
+    /// "By `action` you agree to our Terms of Service and Privacy Policy.", with both linked. They
+    /// are the hosted service's pages whichever server is entered: a self-hoster's are theirs to
+    /// publish. Also used by ``RegisterView``.
+    static func agreement(by action: String) -> AttributedString {
+        var text = AttributedString("By \(action) you agree to our ")
+        var terms = AttributedString("Terms of Service")
+        terms.link = URL(string: "https://\(NeutrinoAppLink.host)/terms")
+        var privacy = AttributedString("Privacy Policy")
+        privacy.link = URL(string: "https://\(NeutrinoAppLink.host)/privacy")
+        text += terms
+        text += AttributedString(" and ")
+        text += privacy
+        text += AttributedString(".")
+        return text
     }
 
     private var canSubmit: Bool {
