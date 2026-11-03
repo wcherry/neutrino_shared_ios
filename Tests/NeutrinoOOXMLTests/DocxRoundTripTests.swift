@@ -307,6 +307,22 @@ final class DocxRoundTripTests: XCTestCase {
         XCTAssertEqual(out.first, embed)
     }
 
+    /// A drawing embed (a pasted Drawing selection, from the web) is a block node like the other
+    /// two. Without it in `blockPlaceholderKinds` it reads back as italic text, and the next save
+    /// from this device writes the text and loses the embed.
+    func testADrawingEmbedKeepsItsAttributes() throws {
+        let embed = DocNode(type: "drawingEmbed", attrs: [
+            "drawingId": .string("dr1"),
+            "title": .string("Logo"),
+            "selection": .string(#"{"kind":"objects","layerId":"l1","ids":["o1"]}"#),
+            "width": .string("320"),
+            "height": .string("200"),
+        ])
+        let out = try bodyRoundTrip([embed, paragraph([text("after")])])
+        XCTAssertEqual(out.first, embed)
+        XCTAssertEqual(out.last, paragraph([text("after")]))
+    }
+
     /// A placeholder is written as italic text, and so is the italic text a user typed next to it —
     /// which would make them one run in the package and lose every placeholder from there on. The
     /// placeholder character style is what keeps the two runs apart.
