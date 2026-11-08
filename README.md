@@ -87,7 +87,7 @@ web's own crypto code, so `NeutrinoCrypto` is tested against what the web actual
   web, Windows and Android, and all four must agree with each other and the server. A change to the
   key file, key vault, QR transfer or file encryption is a coordinated change across every repo.
   See `neutrino/agent_docs/end-to-end-encryption.md`.
-- **The shared Keychain group holds keys only.** Every app declares `com.neutrino.shared` so a key
+- **The shared Keychain group holds keys only.** Every iOS app declares `com.neutrino.shared` so a key
   imported in one app is there in the others. Sessions stay in each app's own group.
 
 Design notes are in `agent_docs/`. The platform-wide rules are in the root `CLAUDE.md` of the
