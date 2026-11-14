@@ -312,8 +312,9 @@ public enum DriveFileCrypto {
     /// Decrypts the file at `source` into a new file at `destination`, in any of the three shapes.
     ///
     /// NEB1 and Photos-chunked bodies are decrypted one chunk at a time, so a video of any size
-    /// needs about one chunk of memory. A v0 body is one push and can only be opened whole, exactly
-    /// as ``decrypt(_:dek:chunkSize:)`` does. On failure the destination is removed.
+    /// needs about one chunk of memory — a Photos body even without its metadata, recognised by
+    /// authenticating its first 1 MiB chunk. A v0 body is one push and can only be opened whole,
+    /// exactly as ``decrypt(_:dek:chunkSize:)`` does. On failure the destination is removed.
     public static func decrypt(from source: URL, to destination: URL, dek: Bytes,
                                chunkSize: Int? = nil) throws {
         do {
@@ -358,8 +359,21 @@ public enum DriveFileCrypto {
                                     write: { try output.write(contentsOf: $0) })
             return
         }
+        // No metadata. A Photos body (always 1 MiB chunks) is recognised by authenticating just its
+        // first chunk: a genuine one opens as a non-final message, while a v0 body can't — its only
+        // tag is at the very end. That keeps a large Photos video streaming instead of read whole.
+        if Int(length) > headerBytes + photosChunkSize + chunkOverheadBytes,
+           let probe = sodium.secretStream.xchacha20poly1305.initPull(secretKey: dek, header: try read(0, headerBytes)),
+           let (_, tag) = probe.pull(cipherText: try read(headerBytes, photosChunkSize + chunkOverheadBytes)),
+           tag == .MESSAGE {
+            let output = try open()
+            defer { try? output.close() }
+            try streamPhotosChunked(length: Int(length), dek: dek, chunkSize: photosChunkSize, read: read,
+                                    write: { try output.write(contentsOf: $0) })
+            return
+        }
         // v0 has no framing to stream by. Read whole, as the in-memory path does — including its
-        // 1 MiB retry for a Photos body that came without its metadata.
+        // 1 MiB retry, kept for symmetry with it.
         try input.seek(toOffset: 0)
         let whole = try input.readToEnd() ?? Data()
         let output = try open()

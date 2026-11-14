@@ -82,6 +82,17 @@ final class ChunkedFileCryptoTests: XCTestCase {
         XCTAssertEqual(sha256(try Data(contentsOf: destination)), c.sha256)
     }
 
+    func testAPhotosBodyWithoutMetadataStreamsRatherThanLoadingWhole() throws {
+        // A body larger than one chunk whose first chunk authenticates as a non-final message is
+        // streamed; the same file truncated mid-way still fails, so the probe proves nothing alone.
+        let c = try XCTUnwrap(Self.vectors.cases.first { $0.name == "photos-1mib" })
+        let full = data(c.ciphertext)
+        let source = temp("in"), destination = temp("out")
+        try full.prefix(full.count - 3).write(to: source)
+        XCTAssertThrowsError(try DriveFileCrypto.decrypt(from: source, to: destination, dek: dek))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+    }
+
     func testEveryRejectionFailsInMemoryAndStreaming() throws {
         XCTAssertEqual(Self.vectors.rejected.count, 13)
         for r in Self.vectors.rejected {
