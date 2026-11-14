@@ -139,6 +139,20 @@ final class ChunkedFileCryptoTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: decrypted), plain)
     }
 
+    func testTheChunkByChunkWriterMatchesTheWholeOne() throws {
+        let key = DriveFileCrypto.newDEK()
+        let plain = plaintext(10_000)
+        var pieces: [Int] = []
+        var blob = Data()
+        let count = try DriveFileCrypto.encryptNEB1(plain, dek: key, chunkSize: 4096) { bytes in
+            pieces.append(bytes.count)
+            blob.append(contentsOf: bytes)
+        }
+        XCTAssertEqual(pieces, [44, 4096 + 17, 4096 + 17, 1808 + 17], "header, then one chunk at a time")
+        XCTAssertEqual(count, blob.count)
+        XCTAssertEqual(try DriveFileCrypto.decrypt(blob, dek: key), plain)
+    }
+
     func testTheWriterRefusesAChunkSizeOutsideTheRange() {
         let key = DriveFileCrypto.newDEK()
         XCTAssertThrowsError(try DriveFileCrypto.encryptNEB1(plaintext(10), dek: key, chunkSize: 4095))

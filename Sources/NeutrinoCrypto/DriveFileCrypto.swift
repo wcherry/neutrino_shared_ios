@@ -199,6 +199,20 @@ public enum DriveFileCrypto {
         return out
     }
 
+    /// Encrypts `plaintext` as NEB1, handing each piece to `write` as it is made — the 44-byte
+    /// header first, then one ciphertext chunk at a time — so the caller can stream it into a
+    /// request body without the ciphertext ever existing whole. Returns the ciphertext's length.
+    @discardableResult
+    public static func encryptNEB1(_ plaintext: Data, dek: Bytes,
+                                   chunkSize: Int = neb1DefaultChunkSize,
+                                   writing write: (Bytes) throws -> Void) throws -> Int {
+        var written = 0
+        try encryptNEB1(length: UInt64(plaintext.count), dek: dek, chunkSize: chunkSize,
+                        read: { offset, count in plaintext.subdata(in: offset..<offset + count) },
+                        write: { bytes in try write(bytes); written += bytes.count })
+        return written
+    }
+
     /// Encrypts the file at `source` into a new file at `destination` as NEB1, holding one chunk of
     /// plaintext and one of ciphertext at a time. Returns the ciphertext's length.
     @discardableResult
