@@ -218,20 +218,37 @@ public enum DriveFileCrypto {
     @discardableResult
     public static func encryptNEB1(from source: URL, to destination: URL, dek: Bytes,
                                    chunkSize: Int = neb1DefaultChunkSize) throws -> Int {
-        let input = try FileHandle(forReadingFrom: source)
-        defer { try? input.close() }
-        let length = try input.seekToEnd()
         FileManager.default.createFile(atPath: destination.path, contents: nil)
         let output = try FileHandle(forWritingTo: destination)
         defer { try? output.close() }
+        return try encryptNEB1(from: source, dek: dek, chunkSize: chunkSize) { bytes in
+            try output.write(contentsOf: bytes)
+        }
+    }
+
+    /// Encrypts the file at `source` as NEB1, handing each piece to `write` as it is made — the
+    /// 44-byte header, then one ciphertext chunk at a time — so a caller can stream a file of any
+    /// size into a request body holding about one chunk. Returns the ciphertext's length.
+    ///
+    /// The header authenticates the file's length as it is when this starts, so a file that grows
+    /// or shrinks underneath throws rather than producing a blob that lies about its size.
+    @discardableResult
+    public static func encryptNEB1(from source: URL, dek: Bytes,
+                                   chunkSize: Int = neb1DefaultChunkSize,
+                                   writing write: (Bytes) throws -> Void) throws -> Int {
+        let input = try FileHandle(forReadingFrom: source)
+        defer { try? input.close() }
+        let length = try input.seekToEnd()
         var written = 0
         try encryptNEB1(length: length, dek: dek, chunkSize: chunkSize,
                         read: { offset, count in
                             try input.seek(toOffset: UInt64(offset))
-                            return try input.read(upToCount: count) ?? Data()
+                            let chunk = try input.read(upToCount: count) ?? Data()
+                            guard chunk.count == count else { throw DriveFileCryptoError.encryptionFailed }
+                            return chunk
                         },
                         write: { bytes in
-                            try output.write(contentsOf: bytes)
+                            try write(bytes)
                             written += bytes.count
                         })
         return written
